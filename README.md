@@ -56,7 +56,7 @@ A comprehensive guide to advanced software engineering concepts, design patterns
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/advanced-software-engineering.git
+git clone https://github.com/louis-sanna-eki/advanced-software-engineering.git
 cd advanced-software-engineering
 ```
 
