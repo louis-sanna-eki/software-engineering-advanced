@@ -1,0 +1,275 @@
+# Component-Based Architecture: Building Maintainable Systems
+
+Component-based architecture helps us build maintainable systems by organizing code into independent, reusable components. This approach emphasizes loose coupling and high cohesion.
+
+## Understanding Components
+
+A component is a self-contained unit that:
+1. Has a clear, single responsibility
+2. Exposes a well-defined interface
+3. Hides its implementation details
+4. Can be developed and tested in isolation
+
+### Example: Well-Defined Component
+
+```python
+from typing import TypedDict, Protocol, Callable
+from typing_extensions import NotRequired
+
+# Define data structures with TypedDict
+class PaymentData(TypedDict):
+    amount: float
+    currency: str
+    metadata: NotRequired[dict]
+
+class PaymentResult(TypedDict):
+    success: bool
+    transaction_id: str
+    error_message: NotRequired[str]
+
+# Define behavior with Protocol
+class PaymentProcessor(Protocol):
+    def process_payment(self, data: PaymentData) -> PaymentResult: ...
+    def refund_payment(self, transaction_id: str) -> PaymentResult: ...
+
+# Implementation as pure functions
+def create_stripe_processor(api_key: str) -> PaymentProcessor:
+    def process_payment(data: PaymentData) -> PaymentResult:
+        result = stripe.process(
+            amount=data['amount'],
+            currency=data['currency'],
+            api_key=api_key
+        )
+        return {
+            'success': result.ok,
+            'transaction_id': result.id,
+            'error_message': result.error if not result.ok else None
+        }
+    
+    def refund_payment(transaction_id: str) -> PaymentResult:
+        result = stripe.refund(transaction_id, api_key)
+        return {
+            'success': result.ok,
+            'transaction_id': transaction_id,
+            'error_message': result.error if not result.ok else None
+        }
+    
+    return PaymentProcessor(
+        process_payment=process_payment,
+        refund_payment=refund_payment
+    )
+
+# Alternative implementation
+def create_paypal_processor(client_id: str, client_secret: str) -> PaymentProcessor:
+    def process_payment(data: PaymentData) -> PaymentResult:
+        result = paypal.execute_payment(
+            amount=data['amount'],
+            currency=data['currency'],
+            client_id=client_id
+        )
+        return {
+            'success': result.success,
+            'transaction_id': result.id,
+            'error_message': result.error_message
+        }
+    
+    def refund_payment(transaction_id: str) -> PaymentResult:
+        result = paypal.refund(transaction_id, client_secret)
+        return {
+            'success': result.success,
+            'transaction_id': transaction_id,
+            'error_message': result.error_message
+        }
+    
+    return PaymentProcessor(
+        process_payment=process_payment,
+        refund_payment=refund_payment
+    )
+```
+
+## Loose Coupling
+
+Components should depend on interfaces, not implementations:
+
+```python
+from typing import TypedDict, Protocol, List
+
+class OrderItem(TypedDict):
+    product_id: str
+    quantity: int
+    price: float
+
+class Order(TypedDict):
+    items: List[OrderItem]
+    total: float
+    user_id: str
+
+# Define behaviors as protocols
+class InventoryChecker(Protocol):
+    def check_availability(self, items: List[OrderItem]) -> bool: ...
+
+class OrderNotifier(Protocol):
+    def notify_created(self, order: Order) -> None: ...
+
+# Pure function for processing orders
+def process_order(
+    items: List[OrderItem],
+    user_id: str,
+    check_inventory: InventoryChecker,
+    notify: OrderNotifier
+) -> Order:
+    # Validate first
+    if not items:
+        raise ValueError("Order must contain items")
+        
+    # Check inventory
+    if not check_inventory.check_availability(items):
+        raise ValueError("Some items are not available")
+    
+    # Calculate total
+    total = sum(item['price'] * item['quantity'] for item in items)
+    
+    # Create order
+    order: Order = {
+        'items': items,
+        'total': total,
+        'user_id': user_id
+    }
+    
+    # Notify
+    notify.notify_created(order)
+    
+    return order
+
+# Implementation examples
+def create_redis_inventory_checker(redis_client) -> InventoryChecker:
+    def check_availability(items: List[OrderItem]) -> bool:
+        return all(
+            redis_client.get(f"stock:{item['product_id']}") >= item['quantity']
+            for item in items
+        )
+    return InventoryChecker(check_availability=check_availability)
+
+def create_slack_notifier(webhook_url: str) -> OrderNotifier:
+    def notify_created(order: Order) -> None:
+        message = f"New order created: {len(order['items'])} items, total: ${order['total']}"
+        requests.post(webhook_url, json={'text': message})
+    return OrderNotifier(notify_created=notify_created)
+```
+
+## Feature-Based Organization
+
+Organize code by feature, keeping related functionality together:
+
+```python
+# users/
+#   schema.py
+from typing import TypedDict, Literal
+
+class UserPreferences(TypedDict):
+    theme: Literal["light", "dark"]
+    notifications_enabled: bool
+    email_frequency: Literal["daily", "weekly", "never"]
+
+class User(TypedDict):
+    id: str
+    email: str
+    name: str
+    preferences: UserPreferences
+
+#   validation.py
+def validate_user(data: dict) -> User:
+    if not data.get('email'):
+        raise ValueError("Email is required")
+    return {
+        'id': str(uuid.uuid4()),
+        'email': data['email'],
+        'name': data.get('name', ''),
+        'preferences': {
+            'theme': 'light',
+            'notifications_enabled': True,
+            'email_frequency': 'daily'
+        }
+    }
+
+#   operations.py
+def update_preferences(
+    user: User,
+    new_preferences: UserPreferences
+) -> User:
+    return {
+        **user,
+        'preferences': new_preferences
+    }
+```
+
+## Open-Closed Principle
+
+Design functions that are open for extension but closed for modification:
+
+```python
+from typing import TypedDict, Protocol, List
+from decimal import Decimal
+
+class PriceModifier(Protocol):
+    def modify(self, price: Decimal) -> Decimal: ...
+
+# Different price modifiers
+def create_quantity_discount(
+    threshold: int,
+    discount_percent: Decimal
+) -> PriceModifier:
+    def modify(price: Decimal) -> Decimal:
+        if quantity >= threshold:
+            return price * (1 - discount_percent)
+        return price
+    return PriceModifier(modify=modify)
+
+def create_seasonal_discount(
+    start_date: datetime,
+    end_date: datetime,
+    discount_percent: Decimal
+) -> PriceModifier:
+    def modify(price: Decimal) -> Decimal:
+        if start_date <= datetime.now() <= end_date:
+            return price * (1 - discount_percent)
+        return price
+    return PriceModifier(modify=modify)
+
+# Function composition for price calculation
+def calculate_final_price(
+    base_price: Decimal,
+    modifiers: List[PriceModifier]
+) -> Decimal:
+    return reduce(
+        lambda price, modifier: modifier.modify(price),
+        modifiers,
+        base_price
+    )
+
+# Usage
+modifiers = [
+    create_quantity_discount(threshold=10, discount_percent=Decimal('0.1')),
+    create_seasonal_discount(
+        start_date=datetime(2024, 1, 1),
+        end_date=datetime(2024, 1, 31),
+        discount_percent=Decimal('0.2')
+    )
+]
+
+final_price = calculate_final_price(Decimal('100'), modifiers)
+```
+
+## Key Takeaways
+
+- Use TypedDict for data structures
+- Define behaviors with Protocols
+- Implement components as pure functions
+- Compose functionality through function composition
+- Keep related code together by feature
+
+## Additional Resources
+
+- [Python Type Hints](https://docs.python.org/3/library/typing.html)
+- [TypedDict Documentation](https://www.python.org/dev/peps/pep-0589/)
+- [Functional Programming in Python](https://docs.python.org/3/howto/functional.html) 

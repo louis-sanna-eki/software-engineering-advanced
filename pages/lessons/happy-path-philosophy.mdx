@@ -159,26 +159,6 @@ def process_payment(payment: Payment) -> None:
     notify_user(transaction)
 ```
 
-## Exercises
-
-1. **Happy Path Identification**
-   - Take a complex function
-   - Identify the main success path
-   - List all the error cases
-   - Reorganize the code to make the happy path clear
-
-2. **Error Case Refactoring**
-   - Find deeply nested error handling
-   - Move error cases to the top
-   - Use early returns or exceptions
-   - Keep the happy path at a single indentation level
-
-3. **Pure Function Practice**
-   - Convert a complex function into pure functions
-   - Separate validation from processing
-   - Make the happy path obvious
-   - Handle error cases consistently
-
 ## Key Takeaways
 
 - Keep the happy path clear and visible
