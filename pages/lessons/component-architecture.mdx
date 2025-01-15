@@ -1,275 +1,263 @@
 # Component-Based Architecture: Building Maintainable Systems
 
-Component-based architecture helps us build maintainable systems by organizing code into independent, reusable components. This approach emphasizes loose coupling and high cohesion.
+Component-based architecture helps us build maintainable systems by organizing code into independent, reusable pieces. This approach naturally builds on our functional programming principles.
 
-## Understanding Components
+## What Makes a Good Component?
 
-A component is a self-contained unit that:
+A good component:
 1. Has a clear, single responsibility
 2. Exposes a well-defined interface
-3. Hides its implementation details
-4. Can be developed and tested in isolation
+3. Can be tested in isolation
+4. Manages its own state
 
-### Example: Well-Defined Component
+### Example: Payment Processing Component
 
 ```python
-from typing import TypedDict, Protocol, Callable
-from typing_extensions import NotRequired
+from typing import TypedDict, Literal, Protocol
+from decimal import Decimal
 
-# Define data structures with TypedDict
-class PaymentData(TypedDict):
-    amount: float
+# Clear interface using TypedDict
+class PaymentRequest(TypedDict):
+    amount: Decimal
     currency: str
-    metadata: NotRequired[dict]
+    payment_method: Literal["card", "bank_transfer"]
+    customer_id: str
 
 class PaymentResult(TypedDict):
     success: bool
     transaction_id: str
-    error_message: NotRequired[str]
+    error_message: str
 
-# Define behavior with Protocol
+# Protocol defines the interface
 class PaymentProcessor(Protocol):
-    def process_payment(self, data: PaymentData) -> PaymentResult: ...
-    def refund_payment(self, transaction_id: str) -> PaymentResult: ...
+    def process_payment(self, request: PaymentRequest) -> PaymentResult: ...
 
-# Implementation as pure functions
+# Concrete implementation
 def create_stripe_processor(api_key: str) -> PaymentProcessor:
-    def process_payment(data: PaymentData) -> PaymentResult:
-        result = stripe.process(
-            amount=data['amount'],
-            currency=data['currency'],
-            api_key=api_key
-        )
+    def process_payment(request: PaymentRequest) -> PaymentResult:
+        # Implementation details hidden
         return {
-            'success': result.ok,
-            'transaction_id': result.id,
-            'error_message': result.error if not result.ok else None
+            "success": True,
+            "transaction_id": "tx_123",
+            "error_message": ""
         }
     
-    def refund_payment(transaction_id: str) -> PaymentResult:
-        result = stripe.refund(transaction_id, api_key)
-        return {
-            'success': result.ok,
-            'transaction_id': transaction_id,
-            'error_message': result.error if not result.ok else None
-        }
-    
-    return PaymentProcessor(
-        process_payment=process_payment,
-        refund_payment=refund_payment
-    )
+    return type("StripeProcessor", (), {
+        "process_payment": process_payment
+    })()
 
 # Alternative implementation
-def create_paypal_processor(client_id: str, client_secret: str) -> PaymentProcessor:
-    def process_payment(data: PaymentData) -> PaymentResult:
-        result = paypal.execute_payment(
-            amount=data['amount'],
-            currency=data['currency'],
-            client_id=client_id
-        )
+def create_paypal_processor(credentials: dict) -> PaymentProcessor:
+    def process_payment(request: PaymentRequest) -> PaymentResult:
         return {
-            'success': result.success,
-            'transaction_id': result.id,
-            'error_message': result.error_message
+            "success": True,
+            "transaction_id": "pp_456",
+            "error_message": ""
         }
     
-    def refund_payment(transaction_id: str) -> PaymentResult:
-        result = paypal.refund(transaction_id, client_secret)
-        return {
-            'success': result.success,
-            'transaction_id': transaction_id,
-            'error_message': result.error_message
-        }
-    
-    return PaymentProcessor(
-        process_payment=process_payment,
-        refund_payment=refund_payment
-    )
+    return type("PayPalProcessor", (), {
+        "process_payment": process_payment
+    })()
 ```
 
-## Loose Coupling
+## Loose Coupling Through Interfaces
 
 Components should depend on interfaces, not implementations:
 
 ```python
 from typing import TypedDict, Protocol, List
+from decimal import Decimal
 
+# Domain types
 class OrderItem(TypedDict):
     product_id: str
     quantity: int
-    price: float
+    price: Decimal
 
 class Order(TypedDict):
     items: List[OrderItem]
-    total: float
-    user_id: str
+    total: Decimal
+    customer_id: str
 
-# Define behaviors as protocols
+# Component interfaces
 class InventoryChecker(Protocol):
     def check_availability(self, items: List[OrderItem]) -> bool: ...
 
+class PaymentProcessor(Protocol):
+    def process_payment(self, amount: Decimal, customer_id: str) -> bool: ...
+
 class OrderNotifier(Protocol):
-    def notify_created(self, order: Order) -> None: ...
+    def notify_order_created(self, order: Order) -> None: ...
 
-# Pure function for processing orders
-def process_order(
-    items: List[OrderItem],
-    user_id: str,
-    check_inventory: InventoryChecker,
-    notify: OrderNotifier
-) -> Order:
-    # Validate first
-    if not items:
-        raise ValueError("Order must contain items")
-        
-    # Check inventory
-    if not check_inventory.check_availability(items):
-        raise ValueError("Some items are not available")
-    
-    # Calculate total
-    total = sum(item['price'] * item['quantity'] for item in items)
-    
-    # Create order
-    order: Order = {
-        'items': items,
-        'total': total,
-        'user_id': user_id
-    }
-    
-    # Notify
-    notify.notify_created(order)
-    
-    return order
-
-# Implementation examples
-def create_redis_inventory_checker(redis_client) -> InventoryChecker:
-    def check_availability(items: List[OrderItem]) -> bool:
-        return all(
-            redis_client.get(f"stock:{item['product_id']}") >= item['quantity']
-            for item in items
-        )
-    return InventoryChecker(check_availability=check_availability)
-
-def create_slack_notifier(webhook_url: str) -> OrderNotifier:
-    def notify_created(order: Order) -> None:
-        message = f"New order created: {len(order['items'])} items, total: ${order['total']}"
-        requests.post(webhook_url, json={'text': message})
-    return OrderNotifier(notify_created=notify_created)
+# Order processor component
+def create_order_processor(
+    inventory: InventoryChecker,
+    payments: PaymentProcessor,
+    notifier: OrderNotifier
+):
+    def process_order(order: Order) -> bool:
+        # Each step is independent and testable
+        if not inventory.check_availability(order["items"]):
+            return False
+            
+        if not payments.process_payment(order["total"], order["customer_id"]):
+            return False
+            
+        notifier.notify_order_created(order)
+        return True
+            
+    return process_order
 ```
 
-## Feature-Based Organization
+## Colocation: Organize by Feature
 
-Organize code by feature, keeping related functionality together:
+Instead of organizing by technical type (models, views, controllers), organize by feature:
 
-```python
-# users/
-#   schema.py
-from typing import TypedDict, Literal
+```
+❌ Bad Organization
+src/
+  models/
+    user.py
+    order.py
+    product.py
+  controllers/
+    user_controller.py
+    order_controller.py
+  services/
+    user_service.py
+    order_service.py
 
-class UserPreferences(TypedDict):
-    theme: Literal["light", "dark"]
-    notifications_enabled: bool
-    email_frequency: Literal["daily", "weekly", "never"]
-
-class User(TypedDict):
-    id: str
-    email: str
-    name: str
-    preferences: UserPreferences
-
-#   validation.py
-def validate_user(data: dict) -> User:
-    if not data.get('email'):
-        raise ValueError("Email is required")
-    return {
-        'id': str(uuid.uuid4()),
-        'email': data['email'],
-        'name': data.get('name', ''),
-        'preferences': {
-            'theme': 'light',
-            'notifications_enabled': True,
-            'email_frequency': 'daily'
-        }
-    }
-
-#   operations.py
-def update_preferences(
-    user: User,
-    new_preferences: UserPreferences
-) -> User:
-    return {
-        **user,
-        'preferences': new_preferences
-    }
+✅ Good Organization
+src/
+  users/
+    types.py      # TypedDicts for user domain
+    storage.py    # User storage interface
+    actions.py    # Pure functions for user operations
+    api.py        # API endpoints for user features
+  orders/
+    types.py      # TypedDicts for order domain
+    validation.py # Order validation rules
+    processing.py # Order processing logic
+    api.py        # API endpoints for orders
 ```
 
-## Open-Closed Principle
+## The Open-Closed Principle
 
-Design functions that are open for extension but closed for modification:
+Components should be open for extension but closed for modification. Use composition of pure functions:
 
 ```python
-from typing import TypedDict, Protocol, List
+from typing import TypedDict, Callable, List
 from decimal import Decimal
 
-class PriceModifier(Protocol):
-    def modify(self, price: Decimal) -> Decimal: ...
+# Price rule component
+class PriceRule(TypedDict):
+    name: str
+    calculate: Callable[[Decimal], Decimal]
 
-# Different price modifiers
-def create_quantity_discount(
-    threshold: int,
-    discount_percent: Decimal
-) -> PriceModifier:
-    def modify(price: Decimal) -> Decimal:
-        if quantity >= threshold:
-            return price * (1 - discount_percent)
-        return price
-    return PriceModifier(modify=modify)
+def create_discount_rule(percentage: Decimal) -> PriceRule:
+    """Creates a percentage discount rule"""
+    def calculate(price: Decimal) -> Decimal:
+        return price * (1 - percentage / 100)
+    
+    return {
+        "name": f"{percentage}% discount",
+        "calculate": calculate
+    }
 
-def create_seasonal_discount(
-    start_date: datetime,
-    end_date: datetime,
-    discount_percent: Decimal
-) -> PriceModifier:
-    def modify(price: Decimal) -> Decimal:
-        if start_date <= datetime.now() <= end_date:
-            return price * (1 - discount_percent)
-        return price
-    return PriceModifier(modify=modify)
+def create_minimum_price_rule(minimum: Decimal) -> PriceRule:
+    """Creates a minimum price rule"""
+    def calculate(price: Decimal) -> Decimal:
+        return max(price, minimum)
+    
+    return {
+        "name": f"Minimum ${minimum}",
+        "calculate": calculate
+    }
 
-# Function composition for price calculation
-def calculate_final_price(
+# Compose rules
+def apply_price_rules(
     base_price: Decimal,
-    modifiers: List[PriceModifier]
+    rules: List[PriceRule]
 ) -> Decimal:
-    return reduce(
-        lambda price, modifier: modifier.modify(price),
-        modifiers,
-        base_price
-    )
+    price = base_price
+    for rule in rules:
+        price = rule["calculate"](price)
+    return price
 
 # Usage
-modifiers = [
-    create_quantity_discount(threshold=10, discount_percent=Decimal('0.1')),
-    create_seasonal_discount(
-        start_date=datetime(2024, 1, 1),
-        end_date=datetime(2024, 1, 31),
-        discount_percent=Decimal('0.2')
-    )
+rules = [
+    create_discount_rule(Decimal("10")),
+    create_minimum_price_rule(Decimal("5"))
 ]
 
-final_price = calculate_final_price(Decimal('100'), modifiers)
+final_price = apply_price_rules(Decimal("100"), rules)
+```
+
+## Vertical vs Horizontal Splitting
+
+Two ways to split components:
+
+### Vertical (by Feature)
+```python
+# users/types.py
+class User(TypedDict):
+    id: str
+    name: str
+    email: str
+
+# users/validation.py
+def validate_email(email: str) -> bool:
+    return "@" in email
+
+# users/storage.py
+class UserStorage(Protocol):
+    def save(self, user: User) -> None: ...
+    def get(self, user_id: str) -> User: ...
+
+# users/api.py
+def create_user_endpoints(storage: UserStorage):
+    def create_user(user: User) -> None:
+        if not validate_email(user["email"]):
+            raise ValueError("Invalid email")
+        storage.save(user)
+    
+    return {"create_user": create_user}
+```
+
+### Horizontal (by Layer)
+```python
+# shared/storage.py
+class Storage(Protocol):
+    def save(self, key: str, data: dict) -> None: ...
+    def get(self, key: str) -> dict: ...
+
+# shared/validation.py
+def validate_required(data: dict, fields: List[str]) -> bool:
+    return all(field in data for field in fields)
+
+# shared/api.py
+def create_crud_endpoints(
+    storage: Storage,
+    validate: Callable[[dict], bool]
+):
+    def create(data: dict) -> None:
+        if not validate(data):
+            raise ValueError("Invalid data")
+        storage.save(data["id"], data)
+    
+    return {"create": create}
 ```
 
 ## Key Takeaways
 
-- Use TypedDict for data structures
-- Define behaviors with Protocols
-- Implement components as pure functions
-- Compose functionality through function composition
-- Keep related code together by feature
+- Use TypedDict and Protocol for clear interfaces
+- Organize code by feature, not technical type
+- Components should have a single responsibility
+- Depend on interfaces, not implementations
+- Use pure functions and composition
 
 ## Additional Resources
 
-- [Python Type Hints](https://docs.python.org/3/library/typing.html)
-- [TypedDict Documentation](https://www.python.org/dev/peps/pep-0589/)
-- [Functional Programming in Python](https://docs.python.org/3/howto/functional.html) 
+- [Python Protocol Documentation](https://docs.python.org/3/library/typing.html#typing.Protocol)
+- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [Feature-Sliced Design](https://feature-sliced.design/) 
