@@ -1,0 +1,364 @@
+# Asynchronous Programming: Patterns and Best Practices
+
+Asynchronous programming helps us handle operations that might take time without blocking execution. This lesson explores patterns for writing maintainable async code.
+
+## Async Patterns
+
+### 1. Task-Based Programming
+
+```python
+from typing import TypedDict, List
+import asyncio
+from decimal import Decimal
+
+class Order(TypedDict):
+    id: str
+    items: List[dict]
+    total: Decimal
+
+# ❌ Bad: Mixing async and sync code
+async def process_order(order: Order) -> None:
+    # Blocking call in async function!
+    if db.check_inventory(order["items"]):
+        payment = await process_payment(order["total"])
+        # More blocking calls
+        db.update_inventory(order["items"])
+        db.save_order(order)
+        await send_confirmation(order["id"])
+
+# ✅ Better: Everything is async
+async def process_order(order: Order) -> None:
+    if not await check_inventory(order["items"]):
+        raise ValueError("Items not available")
+    
+    async with transaction():
+        await process_payment(order["total"])
+        await update_inventory(order["items"])
+        await save_order(order)
+    
+    await send_confirmation(order["id"])
+```
+
+### 2. Concurrent Operations
+
+```python
+from typing import TypedDict, List
+import asyncio
+from decimal import Decimal
+
+class ProductInfo(TypedDict):
+    id: str
+    name: str
+    price: Decimal
+    stock: int
+
+# ❌ Bad: Sequential requests
+async def get_products(ids: List[str]) -> List[ProductInfo]:
+    products = []
+    for id in ids:
+        # Each request waits for the previous one
+        product = await api.get_product(id)
+        products.append(product)
+    return products
+
+# ✅ Better: Concurrent requests
+async def get_products(ids: List[str]) -> List[ProductInfo]:
+    # All requests start at once
+    tasks = [api.get_product(id) for id in ids]
+    return await asyncio.gather(*tasks)
+
+# ✅ Better: Controlled concurrency
+async def get_products(ids: List[str], chunk_size: int = 5) -> List[ProductInfo]:
+    products = []
+    for i in range(0, len(ids), chunk_size):
+        chunk = ids[i:i + chunk_size]
+        tasks = [api.get_product(id) for id in chunk]
+        chunk_products = await asyncio.gather(*tasks)
+        products.extend(chunk_products)
+    return products
+```
+
+## Event-Driven Architecture
+
+Use events to handle complex async workflows:
+
+```python
+from typing import TypedDict, Protocol, Callable, Awaitable, List
+from decimal import Decimal
+import asyncio
+
+# Define events
+class OrderEvent(TypedDict):
+    order_id: str
+    total: Decimal
+
+class PaymentEvent(TypedDict):
+    order_id: str
+    payment_id: str
+    status: str
+
+# Event handlers
+async def handle_order_created(event: OrderEvent) -> None:
+    payment = await initiate_payment(event["total"])
+    await publish_event({
+        "order_id": event["order_id"],
+        "payment_id": payment["id"],
+        "status": payment["status"]
+    })
+
+async def handle_payment_completed(event: PaymentEvent) -> None:
+    await update_order_status(event["order_id"], "paid")
+    await send_confirmation(event["order_id"])
+
+# Event dispatcher
+class EventDispatcher:
+    def __init__(self):
+        self.handlers: dict[str, List[Callable]] = {}
+    
+    def subscribe(self, event_type: str, handler: Callable) -> None:
+        if event_type not in self.handlers:
+            self.handlers[event_type] = []
+        self.handlers[event_type].append(handler)
+    
+    async def publish(self, event_type: str, event: dict) -> None:
+        if event_type in self.handlers:
+            tasks = [
+                handler(event)
+                for handler in self.handlers[event_type]
+            ]
+            await asyncio.gather(*tasks)
+
+# Usage
+dispatcher = EventDispatcher()
+dispatcher.subscribe("order_created", handle_order_created)
+dispatcher.subscribe("payment_completed", handle_payment_completed)
+
+async def create_order(order: dict) -> None:
+    # Process order
+    await dispatcher.publish("order_created", {
+        "order_id": order["id"],
+        "total": order["total"]
+    })
+```
+
+## Error Handling in Async Code
+
+Handle errors gracefully and maintain the happy path:
+
+```python
+from typing import TypedDict, Protocol, Optional
+from decimal import Decimal
+import asyncio
+from datetime import datetime, timedelta
+
+class PaymentResult(TypedDict):
+    success: bool
+    error: Optional[str]
+    retry_after: Optional[datetime]
+
+# ❌ Bad: Nested error handling
+async def process_payment(amount: Decimal) -> PaymentResult:
+    try:
+        async with session.post("/payment", json={"amount": amount}) as resp:
+            if resp.status == 200:
+                return {"success": True, "error": None, "retry_after": None}
+            elif resp.status == 429:
+                return {
+                    "success": False,
+                    "error": "Rate limited",
+                    "retry_after": datetime.now() + timedelta(minutes=5)
+                }
+            else:
+                try:
+                    error = await resp.json()
+                    return {
+                        "success": False,
+                        "error": error["message"],
+                        "retry_after": None
+                    }
+                except:
+                    return {
+                        "success": False,
+                        "error": "Unknown error",
+                        "retry_after": None
+                    }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "retry_after": None
+        }
+
+# ✅ Better: Separate error handling
+async def make_payment_request(amount: Decimal) -> dict:
+    async with session.post("/payment", json={"amount": amount}) as resp:
+        resp.raise_for_status()
+        return await resp.json()
+
+async def handle_rate_limit(resp: Response) -> PaymentResult:
+    retry_after = datetime.now() + timedelta(minutes=5)
+    return {
+        "success": False,
+        "error": "Rate limited",
+        "retry_after": retry_after
+    }
+
+async def handle_error_response(resp: Response) -> PaymentResult:
+    try:
+        error = await resp.json()
+        return {
+            "success": False,
+            "error": error["message"],
+            "retry_after": None
+        }
+    except:
+        return {
+            "success": False,
+            "error": "Unknown error",
+            "retry_after": None
+        }
+
+async def process_payment(amount: Decimal) -> PaymentResult:
+    try:
+        result = await make_payment_request(amount)
+        return {
+            "success": True,
+            "error": None,
+            "retry_after": None
+        }
+    except RateLimitError as e:
+        return await handle_rate_limit(e.response)
+    except HTTPError as e:
+        return await handle_error_response(e.response)
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "retry_after": None
+        }
+```
+
+## Performance Considerations
+
+### 1. Connection Pooling
+
+```python
+from typing import TypedDict, AsyncIterator
+import aiohttp
+from contextlib import asynccontextmanager
+
+# ❌ Bad: Creating new connections for each request
+async def get_user(user_id: str) -> dict:
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"/users/{user_id}") as resp:
+            return await resp.json()
+
+# ✅ Better: Reuse connections
+class APIClient:
+    def __init__(self):
+        self.session: Optional[aiohttp.ClientSession] = None
+    
+    async def __aenter__(self) -> "APIClient":
+        self.session = aiohttp.ClientSession()
+        return self
+    
+    async def __aexit__(self, *args) -> None:
+        if self.session:
+            await self.session.close()
+            self.session = None
+    
+    async def get_user(self, user_id: str) -> dict:
+        async with self.session.get(f"/users/{user_id}") as resp:
+            return await resp.json()
+
+# Usage
+async def process_users(user_ids: List[str]) -> None:
+    async with APIClient() as client:
+        tasks = [client.get_user(id) for id in user_ids]
+        users = await asyncio.gather(*tasks)
+```
+
+### 2. Resource Management
+
+```python
+from typing import TypedDict, AsyncIterator
+import asyncio
+from contextlib import asynccontextmanager
+
+class DatabasePool:
+    def __init__(self, max_size: int = 10):
+        self.semaphore = asyncio.Semaphore(max_size)
+    
+    @asynccontextmanager
+    async def acquire(self) -> AsyncIterator[None]:
+        async with self.semaphore:
+            yield
+
+# Usage
+pool = DatabasePool(max_size=5)
+
+async def process_item(item: dict) -> None:
+    async with pool.acquire():
+        # Only 5 concurrent DB operations
+        await save_to_db(item)
+
+async def process_items(items: List[dict]) -> None:
+    tasks = [process_item(item) for item in items]
+    await asyncio.gather(*tasks)
+```
+
+## Testing Async Code
+
+```python
+import pytest
+from typing import AsyncIterator
+from unittest.mock import AsyncMock
+
+# Fixtures for testing
+@pytest.fixture
+async def api_client() -> AsyncIterator[APIClient]:
+    async with APIClient() as client:
+        yield client
+
+# Mock external services
+@pytest.fixture
+def mock_payment_service() -> AsyncMock:
+    return AsyncMock(spec=PaymentService)
+
+# Test async functions
+async def test_process_payment(
+    api_client: APIClient,
+    mock_payment_service: AsyncMock
+) -> None:
+    # Arrange
+    mock_payment_service.charge.return_value = {
+        "success": True,
+        "transaction_id": "123"
+    }
+    
+    # Act
+    result = await api_client.process_payment(
+        amount=Decimal("100"),
+        service=mock_payment_service
+    )
+    
+    # Assert
+    assert result["success"]
+    mock_payment_service.charge.assert_called_once_with(
+        amount=Decimal("100")
+    )
+```
+
+## Key Takeaways
+
+- Keep async and sync code separate
+- Use concurrent operations carefully
+- Handle errors gracefully
+- Manage resources efficiently
+- Test async code thoroughly
+
+## Additional Resources
+
+- [Python asyncio Documentation](https://docs.python.org/3/library/asyncio.html)
+- [AIOHTTP Documentation](https://docs.aiohttp.org/)
+- [Testing Async Code](https://pytest-asyncio.readthedocs.io/) 

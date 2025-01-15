@@ -248,6 +248,63 @@ def create_crud_endpoints(
     return {"create": create}
 ```
 
+# DRY vs Coupling: Finding the Right Balance
+
+When designing components, we often face a tension between DRY (Don't Repeat Yourself) and loose coupling. This lesson explores how to balance these competing principles.
+
+## The Tension
+
+1. **DRY** pushes us to share code and create dependencies
+2. **Loose coupling** pushes us to keep components independent
+3. Sometimes these goals conflict
+
+### Example: Validation Rules
+
+```python
+from typing import TypedDict, Protocol, List
+from decimal import Decimal
+
+# ❌ Too DRY: Shared validation creates coupling
+class ValidationRules:
+    @staticmethod
+    def validate_email(email: str) -> bool:
+        return "@" in email
+    
+    @staticmethod
+    def validate_price(price: Decimal) -> bool:
+        return price > Decimal("0")
+
+class User(TypedDict):
+    email: str
+    name: str
+
+class Product(TypedDict):
+    name: str
+    price: Decimal
+
+# Now both modules depend on ValidationRules
+def create_user(user: User) -> None:
+    if not ValidationRules.validate_email(user["email"]):
+        raise ValueError("Invalid email")
+    # ... save user
+
+def create_product(product: Product) -> None:
+    if not ValidationRules.validate_price(product["price"]):
+        raise ValueError("Invalid price")
+    # ... save product
+
+# ✅ Better: Accept some duplication for independence
+def create_user(user: User) -> None:
+    if "@" not in user["email"]:  # Simple rule duplicated
+        raise ValueError("Invalid email")
+    # ... save user
+
+def create_product(product: Product) -> None:
+    if product["price"] <= Decimal("0"):  # Simple rule duplicated
+        raise ValueError("Invalid price")
+    # ... save product
+```
+
 ## Key Takeaways
 
 - Use TypedDict and Protocol for clear interfaces

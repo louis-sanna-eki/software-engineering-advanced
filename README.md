@@ -44,7 +44,6 @@ A comprehensive guide to advanced software engineering concepts, design patterns
 - Decision Trees
 - Keeping Complexity Low
 - Code Refactoring Strategies
-- DRY vs WET Principles
 
 ### 7. Asynchronous Programming
 - Async Patterns and Best Practices
