@@ -1,0 +1,212 @@
+# Git and Version Control Guide
+
+### Basic Git Concepts
+
+1. **Repository**: A container for your project, including all files and their version history.
+2. **Commit**: A snapshot of your files at a specific point in time.
+3. **Branch**: An independent line of development.
+4. **Remote**: A common repository that all team members use to exchange their changes.
+
+## Development Workflows
+
+### Trunk-Based Development
+
+Trunk-based development is a source control branching model where developers collaborate on code in a single branch called 'trunk' or 'main', resisting any pressure to create other long-lived development branches.
+
+Key characteristics:
+- Short-lived feature branches (typically less than 24 hours)
+- Frequent merges to trunk (at least once per day)
+- High emphasis on automated testing and CI/CD
+- Feature flags for incomplete features
+
+Benefits:
+- Reduces merge conflicts
+- Enables continuous integration
+- Simplifies release process
+- Improves team collaboration
+
+### GitFlow
+
+GitFlow is an alternative branching model that uses multiple long-lived branches:
+
+- `main`: Production-ready code
+- `develop`: Integration branch for features
+- Feature branches: For new development
+- Release branches: For release preparation
+- Hotfix branches: For emergency fixes
+
+Best suited for:
+- Projects with scheduled releases
+- Teams maintaining multiple versions
+- Complex projects with many dependencies
+
+## Conventional Commits
+
+Conventional Commits is a specification for adding human and machine-readable meaning to commit messages. Each commit message follows this structure:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Common types include:
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation changes
+- `style`: Formatting changes
+- `refactor`: Code refactoring
+- `test`: Adding/updating tests
+- `chore`: Maintenance tasks
+
+Examples:
+```bash
+feat(auth): add OAuth2 login support
+fix(api): handle null response from user endpoint
+docs: update README installation steps
+```
+
+Benefits:
+- Automated versioning
+- Automatic changelog generation
+- Clear project history
+- Easier code reviews
+
+## Feature Flags
+
+Feature flags (also known as feature toggles) are a development technique that enables teams to modify system behavior without changing code. They allow teams to:
+
+1. **Deploy Incomplete Features**:
+   ```javascript
+   if (featureFlags.isEnabled('new-dashboard')) {
+     // New dashboard code
+   } else {
+     // Old dashboard code
+   }
+   ```
+
+2. **Control Feature Rollout**:
+   - Gradual rollouts to specific users
+   - A/B testing
+   - Easy feature rollback
+
+3. **Types of Feature Flags**:
+   - Release flags: Short-lived, for feature releases
+   - Experiment flags: For A/B testing
+   - Ops flags: For operational controls
+   - Permission flags: For user access control
+
+Best Practices:
+- Remove flags once features are stable
+- Document all active flags
+- Regular cleanup of obsolete flags
+- Use a feature flag management system
+
+## Semantic Versioning (SemVer)
+
+Semantic Versioning is a versioning scheme that uses a three-part number: MAJOR.MINOR.PATCH
+
+1. MAJOR: Incremented for incompatible API changes.
+2. MINOR: Incremented for backwards-compatible new features.
+3. PATCH: Incremented for backwards-compatible bug fixes.
+
+Example: 2.3.1 means major version 2, minor version 3, and patch version 1.
+
+## Key Versioning Practices
+
+### 1. Commit Often with Meaningful Messages
+
+Make small, logical commits as you work. Each commit should represent a single, cohesive change.
+
+Good commit message: "feat: add user authentication feature"
+Poor commit message: "Fix stuff"
+
+### 2. Branching
+
+Create separate branches for developing new features or fixing bugs. This allows you to work on multiple aspects of your project simultaneously without affecting the main codebase.
+
+### 3. Pull Requests and Code Reviews
+
+Before merging changes into the main branch, create a pull request. This allows team members to review the code, suggest improvements, and catch potential issues early.
+
+### 4. Squashing Commits
+
+Squashing means combining multiple commits into one. This creates a cleaner, more understandable history.
+
+Benefits:
+- Simplifies the commit history
+- Makes code reviews easier
+- Groups related changes together
+
+### 5. Rebasing: When and Why
+
+Rebasing is the process of moving or combining a sequence of commits to a new base commit. It's useful for keeping feature branches up-to-date with the main branch.
+
+Rebase is generally safe on feature branches that aren't shared. However, avoid rebasing branches that others are working on, as it rewrites commit history.
+
+### 6. Tagging Releases
+
+Use tags to mark significant points in your project's history, such as release points.
+
+Example: `v1.0.0` for the first stable release.
+
+# Git Cheatsheet
+
+## Setup
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
+## Basic Commands
+```bash
+git init                     # Initialize a new Git repository
+git clone <repository-url>   # Clone a repository
+git status                   # Check the status of your repository
+git add <file>               # Add a file to the staging area
+git commit -m "Message"      # Commit staged changes with a message
+git push                     # Push commits to remote repository
+git pull                     # Pull changes from remote repository
+```
+
+## Branching
+```bash
+git branch                   # List branches
+git branch <branch-name>     # Create a new branch
+git checkout <branch-name>   # Switch to a branch
+git checkout -b <branch-name> # Create and switch to a new branch
+git merge <branch-name>      # Merge a branch into the current branch
+```
+
+## History and Differences
+```bash
+git log                      # View commit history
+git diff                     # View changes between commits, branches, etc.
+```
+
+## Advanced Operations
+```bash
+git rebase <branch>          # Reapply commits on top of another base
+git cherry-pick <commit>     # Apply the changes from a specific commit
+git stash                    # Temporarily store modified files
+```
+
+## Tagging
+```bash
+git tag <tag-name>           # Create a lightweight tag
+git tag -a <tag-name> -m "Message" # Create an annotated tag
+```
+
+Remember: Always be cautious when using commands that can alter history (like rebase) on shared branches.
+
+## Further Reading
+
+1. **Version Control Systems**
+   - [Git Documentation](https://git-scm.com/doc)
+   - [Trunk Based Development](https://trunkbaseddevelopment.com/)
+
+2. **Versioning Standards**
+   - [Semantic Versioning 2.0.0](https://semver.org/)
+   - [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)

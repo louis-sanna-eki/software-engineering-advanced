@@ -1,0 +1,215 @@
+# Python Development Tooling
+
+> "Beautiful is better than ugly. Explicit is better than implicit. Simple is better than complex." - The Zen of Python, by Tim Peters
+
+Effective tooling is crucial for productive Python development. This lesson covers essential tools and practices for creating robust, maintainable Python projects.
+
+## Python Version
+
+We recommend using Python 3.11 for its performance improvements and new features. To install:
+
+1. Visit https://www.python.org/downloads/
+2. Download Python 3.11.x (latest stable version)
+3. Follow the installation instructions for your operating system
+
+## Environment and Dependency Management
+
+### Conda
+
+Conda is an environment and package manager that simplifies dependency management, especially for data science projects.
+
+Installation:
+1. Download Miniconda from https://docs.conda.io/en/latest/miniconda.html
+2. Run the installer and follow the prompts
+3. Verify installation: `conda --version`
+
+Basic usage:
+```bash
+conda create --name myenv python=3.11
+conda activate myenv
+conda install numpy pandas
+```
+
+### Poetry
+
+Poetry provides fine-grained dependency management and packaging for Python projects.
+
+Installation:
+```bash
+curl -sSL https://install.python-poetry.org | python3 -
+```
+
+Basic usage:
+```bash
+poetry new my-project
+cd my-project
+poetry add requests
+poetry run python your_script.py
+```
+
+### Combining Conda and Poetry
+
+Using Conda for the Python environment and Poetry for package management offers flexibility and control:
+
+1. Create a Conda environment:
+   ```bash
+   conda create --name myenv python=3.11
+   conda activate myenv
+   ```
+
+2. Install Poetry in the Conda environment:
+   ```bash
+   conda install poetry
+   ```
+
+3. Initialize a Poetry project:
+   ```bash
+   poetry init
+   ```
+
+4. Configure Poetry to use the Conda environment:
+   ```bash
+   poetry config virtualenvs.create false
+   ```
+
+5. Manage dependencies with Poetry:
+   ```bash
+   poetry add numpy pandas
+   ```
+
+This setup allows you to leverage Conda's environment management while using Poetry's dependency resolution and packaging features.
+
+## Code Quality Tools
+
+### Ruff
+
+Ruff is a fast Python linter and formatter written in Rust.
+
+Installation:
+```bash
+pip install ruff
+```
+
+Usage:
+```bash
+ruff check .
+ruff format .
+```
+
+Ruff uses sensible defaults, so you don't need to provide a configuration file to get started.
+
+### Pyright
+
+Pyright is a fast type checker for Python.
+
+Installation:
+```bash
+npm install -g pyright
+```
+
+Usage:
+```bash
+pyright
+```
+
+Add type hints to your Python code to leverage Pyright:
+
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+```
+
+## Integrated Development Environment (IDE)
+
+We recommend Visual Studio Code (VS Code) for Python development. Install these extensions:
+
+1. Python (by Microsoft)
+2. Ruff
+3. Pyright
+
+Configure VS Code for optimal Python development:
+
+```json
+{
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    },
+    "python.formatting.provider": "ruff",
+    "python.linting.enabled": true,
+    "python.linting.lintOnSave": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    }
+}
+
+```
+
+## Continuous Integration (CI)
+
+CI helps maintain code quality by automatically running checks on every code change.
+
+### Bitbucket Pipelines
+
+For projects hosted on Bitbucket, use Bitbucket Pipelines. Create a `bitbucket-pipelines.yml` file in your repository root:
+
+```yaml
+pipelines:
+  default:
+    - step:
+        name: Check Python Code
+        image: python:3.11
+        caches:
+          - pip
+        script:
+          - pip install poetry
+          - poetry config virtualenvs.create false
+          - poetry install
+          - pip install ruff
+          - npm install -g pyright
+          - ruff check .
+          - ruff format --check .
+          - pyright
+          - pytest
+
+  branches:
+    main:
+      - step:
+          <<: *check-python-code
+
+```
+
+This pipeline:
+1. Uses Python 3.11
+2. Installs dependencies with Poetry
+3. Runs Ruff for linting and formatting
+4. Runs Pyright for type checking
+5. Executes tests with pytest
+
+## Code Quality Metrics
+
+Install with: `pip install radon`
+
+```bash
+# Calculate cyclomatic complexity
+radon cc ./src -a
+
+# Calculate maintainability index
+radon mi ./src
+
+# Generate raw metrics
+radon raw ./src
+```
+
+## Best Practices
+
+1. Use virtual environments for project isolation.
+2. Keep tools and dependencies up to date.
+3. Write type hints for better code clarity and error catching.
+4. Run linting, formatting, and type checking before committing code.
+5. Write and run tests regularly.
+6. Use CI to enforce code quality standards.
+7. Document your project setup and tooling for team consistency.
+
+By implementing these tools and practices, you'll create a robust Python development environment that promotes code quality, consistency, and productivity. Remember, the goal is to spend more time solving problems and less time fighting with your tools or debugging avoidable issues.

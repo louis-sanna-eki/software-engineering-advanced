@@ -1,0 +1,404 @@
+# Testing
+
+> "Program testing can be used to show the presence of bugs, but never to show their absence!" - Edsger W. Dijkstra
+
+## Introduction
+
+Testing is a critical aspect of software development that helps ensure code quality, reliability, and maintainability. This lesson focuses on advanced testing techniques in Python, emphasizing the use of pytest and Testcontainers to create robust, reliable tests.
+
+## Why pytest?
+
+pytest is recommended for several reasons:
+1. Simple syntax and ease of use
+2. Powerful fixture model
+3. Extensive plugin ecosystem
+4. Detailed test reports
+5. Compatibility with other testing tools
+
+## Test Location: Keep Tests Close to Code
+
+Recommendation: Place test files in the same directory as the code they're testing.
+
+Benefits:
+- Easier to find and maintain tests
+- Encourages developers to write tests alongside code
+- Simplifies import statements
+
+Example structure:
+```
+my_project/
+├── my_module/
+│   ├── __init__.py
+│   ├── feature.py
+│   └── test_feature.py
+├── another_module/
+│   ├── __init__.py
+│   ├── another_feature.py
+│   └── test_another_feature.py
+└── pytest.ini
+```
+
+# Advanced Testing Best Practices with pytest
+
+## Test Independence: The Foundation of Reliable Testing
+
+Each test must be completely independent and self-contained. This means:
+- No shared state between tests
+- No dependency on test execution order
+- No reliance on results from other tests
+- Each test should set up its own data and clean up afterward
+
+### Examples of Test Independence
+
+#### ❌ Bad Practice: Dependent Tests
+```python
+# WRONG: Tests depend on each other
+user_id = None
+
+def test_1_create_user():
+    global user_id
+    user = create_user("test@example.com")
+    user_id = user.id
+    assert user.email == "test@example.com"
+
+def test_2_update_user():
+    # WRONG: Depends on test_1_create_user
+    user = get_user(user_id)
+    user.update(name="New Name")
+    assert user.name == "New Name"
+```
+
+#### ✅ Good Practice: Independent Tests
+```python
+def test_create_user():
+    user = create_user("test@example.com")
+    assert user.email == "test@example.com"
+
+def test_update_user():
+    # Each test creates its own data
+    user = create_user("test@example.com")
+    user.update(name="New Name")
+    assert user.name == "New Name"
+```
+
+### Using Fixtures Effectively
+
+#### ❌ Bad Practice: Shared State in Fixtures
+```python
+# WRONG: Creates shared state across tests
+@pytest.fixture(scope="session")
+def shared_user():
+    return create_user("test@example.com")
+
+def test_update_profile(shared_user):
+    # This test might be affected by other tests
+    shared_user.update_profile(bio="New bio")
+    assert shared_user.bio == "New bio"
+```
+
+#### ✅ Good Practice: Fresh Fixtures
+```python
+@pytest.fixture(autouse=True)
+def clean_database():
+    clean_all_tables()
+    yield
+    clean_all_tables()
+
+@pytest.fixture
+def test_user():
+    user = create_user("test@example.com")
+    yield user
+    user.delete()
+
+def test_update_profile(test_user):
+    test_user.update_profile(bio="New bio")
+    assert test_user.bio == "New bio"
+```
+
+### Database Testing
+
+#### ❌ Bad Practice: Assuming Database State
+```python
+# WRONG: Assumes database state
+def test_create_order():
+    order = create_order(user_id=1, product_id=1)
+    assert order.status == "pending"
+
+def test_order_payment():
+    # WRONG: Depends on existing data
+    order = Order.get(user_id=1)
+    order.process_payment()
+    assert order.status == "paid"
+```
+
+#### ✅ Good Practice: Isolated Tests
+```python
+@pytest.fixture
+def test_product():
+    product = create_test_product(name="Test Product", price=100)
+    yield product
+    product.delete()
+
+@pytest.fixture
+def test_user():
+    user = create_test_user("buyer@example.com")
+    yield user
+    user.delete()
+
+def test_create_order(test_user, test_product):
+    order = create_order(
+        user_id=test_user.id,
+        product_id=test_product.id
+    )
+    assert order.status == "pending"
+    assert order.total == test_product.price
+
+def test_order_payment(test_user, test_product):
+    order = create_order(
+        user_id=test_user.id,
+        product_id=test_product.id
+    )
+    order.process_payment()
+    assert order.status == "paid"
+```
+
+### Testing Business Logic
+
+#### ❌ Bad Practice: Complex Setup in Tests
+```python
+# WRONG: Too much setup in the test
+def test_checkout_flow():
+    user = create_user("test@example.com")
+    cart = create_cart(user.id)
+    product = create_product("Test Product", 100)
+    add_to_cart(cart.id, product.id)
+    payment = process_payment(cart.id)
+    assert payment.status == "success"
+```
+
+#### ✅ Good Practice: Using Fixtures for Setup
+```python
+@pytest.fixture
+def cart_with_product(test_user):
+    cart = create_cart(test_user.id)
+    product = create_test_product("Test Product", 100)
+    add_to_cart(cart.id, product.id)
+    yield cart
+    cart.delete()
+    product.delete()
+
+def test_checkout_flow(cart_with_product):
+    payment = process_payment(cart_with_product.id)
+    assert payment.status == "success"
+    assert payment.amount == cart_with_product.total
+```
+
+### Testing External Services
+
+Instead of using mocks, create test implementations:
+
+```python
+class PaymentProcessor:
+    def process(self, amount: int) -> bool:
+        raise NotImplementedError
+
+class TestPaymentProcessor(PaymentProcessor):
+    def process(self, amount: int) -> bool:
+        return amount > 0
+
+@pytest.fixture
+def payment_processor():
+    return TestPaymentProcessor()
+
+def test_payment_processing(payment_processor, test_user, test_product):
+    order = create_order(
+        user_id=test_user.id,
+        product_id=test_product.id
+    )
+    result = payment_processor.process(order.total)
+    assert result is True
+```
+
+### Testing Email Service
+
+```python
+@pytest.fixture
+def email_queue():
+    return EmailQueue()  # In-memory implementation for testing
+
+def test_send_welcome_email(email_queue, test_user):
+    send_welcome_email(test_user, email_queue)
+    
+    sent_email = email_queue.last_sent
+    assert sent_email.to == test_user.email
+    assert "Welcome" in sent_email.subject
+
+def test_send_order_confirmation(email_queue, test_user, test_product):
+    order = create_order(
+        user_id=test_user.id,
+        product_id=test_product.id
+    )
+    
+    send_order_confirmation(order, email_queue)
+    
+    sent_email = email_queue.last_sent
+    assert sent_email.to == test_user.email
+    assert str(order.id) in sent_email.body
+```
+
+## Key Takeaways
+
+1. **Use pytest Fixtures**: Let fixtures handle setup and cleanup
+2. **Keep Tests Simple**: Each test should focus on one specific behavior
+3. **Avoid Classes**: Use pytest's functional style unless classes provide clear benefits
+4. **Independent Tests**: Each test should be able to run alone
+5. **Clean State**: Every test starts fresh
+6. **Real Implementations**: Use test implementations instead of mocks
+7. **Explicit Setup**: Make all test dependencies clear through fixture usage
+8. **Proper Cleanup**: Use fixture teardown to clean up resources
+9. **Small, Focused Tests**: Test one thing at a time
+
+## Common pytest Features to Use
+
+```python
+# Skipping tests
+@pytest.mark.skip(reason="feature not implemented yet")
+def test_future_feature():
+    ...
+
+# Grouping related tests
+@pytest.mark.integration
+def test_database_integration():
+    ...
+
+# Fixture factories
+@pytest.fixture
+def create_test_product():
+    created_products = []
+    
+    def _create_product(name: str, price: int):
+        product = create_product(name, price)
+        created_products.append(product)
+        return product
+    
+    yield _create_product
+    
+    for product in created_products:
+        product.delete()
+
+def test_multiple_products(create_test_product):
+    product1 = create_test_product("Product 1", 100)
+    product2 = create_test_product("Product 2", 200)
+    assert product1.price < product2.price
+```
+
+## The AAA Pattern
+
+The AAA (Arrange-Act-Assert) pattern is a common structure for writing clear and maintainable tests.
+
+1. **Arrange**: Set up the test data and conditions
+2. **Act**: Perform the action being tested
+3. **Assert**: Check if the result matches the expected outcome
+
+Example:
+```python
+def test_add_positive_numbers():
+    # Arrange
+    a, b = 2, 3
+    expected_result = 5
+
+    # Act
+    result = add(a, b)
+
+    # Assert
+    assert result == expected_result
+```
+
+## Test Fixtures
+
+Fixtures are a general testing concept used to provide data or objects to tests, allowing for better setup and teardown management.
+
+Key concepts of fixtures:
+1. **Setup**: Prepare the test environment
+2. **Provide**: Make the fixture available to the test
+3. **Teardown**: Clean up after the test
+
+In pytest, fixtures are implemented as functions with the `@pytest.fixture` decorator:
+
+```python
+import pytest
+
+@pytest.fixture
+def sample_data():
+    # Setup
+    data = [1, 2, 3, 4, 5]
+    yield data
+    # Teardown (if needed)
+    # This code runs after the test using the fixture
+
+def test_calculate_average(sample_data):
+    assert calculate_average(sample_data) == 3
+```
+
+Fixtures can be scoped to function, class, module, or session levels.
+
+## Testcontainers: Real Dependencies for Tests
+
+Testcontainers is an open-source library that allows you to use Docker containers in your tests, providing real, lightweight instances of databases, message brokers, web browsers, or any other containerized dependency.
+
+Key features of Testcontainers:
+1. Eliminates the need for mocks or complex environment configurations
+2. Defines test dependencies as code
+3. Automatically manages container lifecycle (creation and deletion)
+4. Supports multiple programming languages and testing frameworks
+
+Example using Testcontainers for Python:
+
+```python
+import pytest
+from testcontainers.postgres import PostgresContainer
+
+@pytest.fixture(scope="function")
+def postgres_container():
+    with PostgresContainer("postgres:13") as container:
+        yield container
+
+def test_database_interaction(postgres_container):
+    # Use the postgres_container fixture to interact with a real PostgreSQL database
+    connection_url = postgres_container.get_connection_url()
+    # Perform your database tests here
+```
+
+This approach allows you to test against real dependencies without the need for complex setup or teardown processes.
+
+## Mocking and Dependency Inversion
+
+While Testcontainers provides real dependencies, there are still scenarios where mocking is useful:
+
+1. **Mocking**: Replacing external dependencies with controlled objects for isolated testing.
+2. **Dependency Inversion**: High-level modules should depend on abstractions, not concrete implementations.
+
+Example using pytest's monkeypatch for mocking:
+
+```python
+def test_get_user_data(monkeypatch):
+    def mock_get_user(*args, **kwargs):
+        return {"id": 1, "name": "Test User"}
+    
+    monkeypatch.setattr(requests, "get", mock_get_user)
+    assert get_user_data(1)["name"] == "Test User"
+```
+
+## Best Practices
+
+1. Use descriptive test names that explain the behavior being tested
+2. Keep tests independent and idempotent
+3. Implement continuous integration to run tests automatically
+4. Focus on critical paths (high code coverage is not an objective in itself)
+5. Regularly refactor test code to maintain clarity and efficiency
+6. Use Testcontainers for integration tests that require real dependencies
+7. Combine mocking and real dependencies as needed for comprehensive testing
+
+## Conclusion
+
+Advanced testing in Python is about more than just catching bugs; it's a comprehensive approach to improving code quality and reliability. By leveraging tools like pytest and Testcontainers, and understanding concepts such as fixtures and mocking, you can create tests that truly validate your code's behavior in production-like environments. As you gain experience, you'll develop an intuition for when to use real dependencies versus mocks, how to structure tests for maximum effectiveness, and how to create strategies that instill confidence in your code's correctness. Remember, the goal of testing is to enhance the overall design and dependability of your software. A well-crafted testing suite becomes an integral part of your development process, serving not only as a safety net but also as living documentation of your code's behavior and requirements. In the end, mastering these advanced testing techniques will make you a more effective and confident Python developer.

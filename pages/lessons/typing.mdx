@@ -1,0 +1,305 @@
+# Python Type Hints: A Comprehensive Guide
+
+## Introduction
+Python is dynamically typed, but since Python 3.5, it supports optional type hints through the `typing` module. Type hints improve code readability, catch potential errors early, and enhance IDE support.
+
+## Basic Type Hints
+
+### 1. Simple Types
+```python
+# Without type hints
+name = "Alice"
+age = 25
+is_student = True
+
+# With type hints
+name: str = "Alice"
+age: int = 25
+is_student: bool = True
+```
+
+### 2. Function Type Hints
+```python
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+def calculate_total(price: float, quantity: int) -> float:
+    return price * quantity
+```
+
+## Complex Types
+
+### 1. TypedDict for Structured Dictionaries
+TypedDict is the preferred way to type dictionaries with a fixed structure. It's more precise than using Dict and helps catch structural errors:
+
+```python
+from typing import TypedDict
+
+class UserProfile(TypedDict):
+    name: str
+    age: int
+    email: str
+    is_active: bool
+
+# Using TypedDict
+user: UserProfile = {
+    "name": "Alice Smith",
+    "age": 28,
+    "email": "alice@example.com",
+    "is_active": True
+}
+
+# TypeCheckers will catch these errors:
+user = {
+    "name": "Bob",  # Error: Missing required fields
+}
+
+user = {
+    "name": "Bob",
+    "age": "28",    # Error: Expected int, got str
+    "email": "bob@example.com",
+    "is_active": True
+}
+```
+
+You can also make some fields optional:
+```python
+class UserProfilePartial(TypedDict, total=False):
+    name: str          # Required
+    age: int          # Required
+    email: str        # Optional
+    phone: str        # Optional
+
+# This is valid
+user: UserProfilePartial = {
+    "name": "Charlie",
+    "age": 30
+}
+```
+
+### 2. Lists, Sets, and Regular Dictionaries
+```python
+from typing import List, Set, Dict
+
+# List of strings
+names: List[str] = ["Alice", "Bob", "Charlie"]
+
+# Set of integers
+unique_numbers: Set[int] = {1, 2, 3, 4}
+
+# Dictionary with string keys and integer values
+scores: Dict[str, int] = {
+    "Alice": 95,
+    "Bob": 87,
+    "Charlie": 92
+}
+```
+
+### 2. Optional and Union Types
+```python
+from typing import Optional, Union
+
+# Optional parameters (can be None)
+def get_user_info(user_id: int, email: Optional[str] = None) -> UserProfile:
+    info = {"id": user_id}
+    if email:
+        info["email"] = email
+    return info
+
+# Union types (multiple possible types)
+def process_data(data: Union[str, bytes]) -> str:
+    if isinstance(data, bytes):
+        return data.decode('utf-8')
+    return data
+```
+
+### 3. Custom Types
+```python
+from typing import TypeVar, Generic
+
+T = TypeVar('T')
+
+class Stack(Generic[T]):
+    def __init__(self) -> None:
+        self.items: List[T] = []
+    
+    def push(self, item: T) -> None:
+        self.items.append(item)
+    
+    def pop(self) -> Optional[T]:
+        return self.items.pop() if self.items else None
+
+# Usage
+number_stack: Stack[int] = Stack()
+string_stack: Stack[str] = Stack()
+```
+
+## Advanced Type Patterns
+
+### 1. Protocol and Structural Subtyping
+```python
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class Drawable(Protocol):
+    def draw(self) -> None: ...
+
+class Circle:
+    def draw(self) -> None:
+        print("Drawing a circle")
+
+class Square:
+    def draw(self) -> None:
+        print("Drawing a square")
+
+def render(shape: Drawable) -> None:
+    shape.draw()
+
+# Both work because they implement the Drawable protocol
+render(Circle())
+render(Square())
+```
+
+### 2. Async Function Typing
+```python
+from typing import Awaitable, AsyncIterator
+
+async def fetch_user(user_id: int) -> dict[str, str]:
+    # Simulating API call
+    await asyncio.sleep(1)
+    return {"id": str(user_id), "name": "John Doe"}
+
+async def process_users(
+    user_ids: list[int]
+) -> AsyncIterator[dict[str, str]]:
+    for user_id in user_ids:
+        yield await fetch_user(user_id)
+
+# Callback style
+from typing import Callable, Coroutine
+async def on_user_update(
+    callback: Callable[[dict[str, str]], Coroutine[None, None, None]]
+) -> None:
+    user = await fetch_user(123)
+    await callback(user)
+```
+
+## Practice Exercises
+
+### Exercise 1: Basic Types
+```python
+# Add type hints to these variables and functions
+def multiply(a, b):
+    return a * b
+
+def join_strings(strings, separator):
+    return separator.join(strings)
+
+# Solution
+def multiply(a: int, b: int) -> int:
+    return a * b
+
+def join_strings(strings: List[str], separator: str) -> str:
+    return separator.join(strings)
+```
+
+### Exercise 2: Complex Types
+```python
+# Add type hints to this class
+class UserDatabase:
+    def __init__(self):
+        self.users = {}
+    
+    def add_user(self, username, age, email=None):
+        self.users[username] = {"age": age, "email": email}
+    
+    def get_user(self, username):
+        return self.users.get(username)
+
+# Solution using TypedDict
+class UserData(TypedDict):
+    age: int
+    email: Optional[str]
+
+class UserDatabase:
+    def __init__(self) -> None:
+        self.users: Dict[str, UserData] = {}
+    
+    def add_user(self, username: str, age: int, email: Optional[str] = None) -> None:
+        self.users[username] = {"age": age, "email": email}
+    
+    def get_user(self, username: str) -> Optional[UserData]:
+        return self.users.get(username)
+```
+
+## Best Practices
+
+1. **Start Simple**: Begin with basic type hints and gradually add more complex ones as needed.
+
+2. **Type Checking**: Use type checkers to validate your type hints:
+
+   - **Pyright** (built into VS Code as Pylance):
+     ```bash
+     # Install Pyright
+     pip install pyright
+     
+     # Run type checking
+     pyright your_script.py
+     ```
+     Pyright is the type checker used by VS Code's Python extension. It's fast, strict by default, and provides excellent IDE integration.
+
+   - **mypy** (the original Python type checker):
+   ```bash
+   mypy your_script.py
+   ```
+
+3. **Documentation**: Type hints serve as documentation. Use them to make your code self-documenting:
+   ```python
+   def process_payment(
+       amount: float,
+       currency: str = "USD",
+       description: Optional[str] = None
+   ) -> bool:
+       """Process a payment transaction.
+       
+       Args:
+           amount: The payment amount
+           currency: Three-letter currency code
+           description: Optional payment description
+       
+       Returns:
+           True if payment successful, False otherwise
+       """
+       # Implementation here
+       pass
+   ```
+
+4. **Forward References**: When referencing a type that hasn't been defined yet, use string literals:
+   ```python
+   class Tree:
+       def __init__(self, value: int) -> None:
+           self.value = value
+           self.left: Optional['Tree'] = None
+           self.right: Optional['Tree'] = None
+   ```
+
+## Common Gotchas
+
+1. **Circular Imports**: Use string literals for types from circular imports:
+   ```python
+   # models.py
+   from typing import Optional
+   
+   class User:
+       def get_manager(self) -> Optional['User']:
+           return self._manager
+   ```
+
+2. **Runtime Performance**: Type hints don't affect runtime performance as they're ignored during execution.
+
+3. **Version Compatibility**: Some typing features require specific Python versions. Use `typing_extensions` for backward compatibility.
+
+## Summary
+Type hints are a powerful tool for making Python code more maintainable and less error-prone. While optional, they provide valuable documentation and enable better tooling support. Start with basic types and gradually incorporate more complex type hints as your needs grow.
+
+Try the exercises above and experiment with type checking tools to get comfortable with Python's type system!

@@ -1,0 +1,14 @@
+{
+  "index": "Introduction",
+  "lessons": "Lessons",
+  "about": {
+    "title": "About",
+    "type": "page"
+  },
+  "contact": {
+    "title": "Contact ↗",
+    "type": "page",
+    "href": "https://ekimetrics.com",
+    "newWindow": true
+  }
+}
