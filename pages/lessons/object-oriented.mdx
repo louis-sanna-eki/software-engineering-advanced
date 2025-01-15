@@ -1,0 +1,270 @@
+# Object-Oriented Design
+
+Understanding when and how to use object-oriented programming principles is crucial for writing maintainable code. This lesson explores the key concepts and pitfalls of OOP.
+
+## When to Use Classes
+
+Classes are best used when you need to encapsulate state and behavior together. Here are the key indicators that you might need a class:
+
+### State Management
+- Multiple related properties that change together
+- Need to maintain invariants between properties
+- Complex initialization logic
+- Lifecycle management
+
+### Example: Good Use of Classes
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List
+
+@dataclass
+class Transaction:
+    type: str
+    amount: float
+    date: datetime
+
+class BankAccount:
+    def __init__(self, initial_balance: float):
+        self._balance = initial_balance
+        self._transactions: List[Transaction] = []
+        self._last_activity_date = datetime.now()
+
+    def deposit(self, amount: float) -> None:
+        if amount <= 0:
+            raise ValueError("Invalid amount")
+        self._balance += amount
+        self._record_transaction("deposit", amount)
+
+    def _record_transaction(self, type_: str, amount: float) -> None:
+        self._transactions.append(
+            Transaction(type=type_, amount=amount, date=datetime.now())
+        )
+        self._last_activity_date = datetime.now()
+```
+
+### Example: Unnecessary Use of Classes
+
+```python
+# Bad: No state to manage, just functions
+class MathOperations:
+    def add(self, a: float, b: float) -> float:
+        return a + b
+    
+    def subtract(self, a: float, b: float) -> float:
+        return a - b
+
+# Better: Just use functions
+def add(a: float, b: float) -> float:
+    return a + b
+
+def subtract(a: float, b: float) -> float:
+    return a - b
+```
+
+## The Dangers of Inheritance
+
+Inheritance can lead to several problems:
+
+### Common Issues:
+1. Tight coupling between parent and child
+2. Fragile base class problem
+3. Deep inheritance hierarchies
+4. Violation of encapsulation
+5. Difficulty in testing
+
+### Example: Problematic Inheritance
+
+```python
+class Animal:
+    def __init__(self, name: str):
+        self._name = name
+    
+    def make_sound(self) -> None:
+        print("Some generic sound")
+    
+    def move(self) -> None:
+        print("Moving...")
+
+class Bird(Animal):
+    def fly(self) -> None:
+        print("Flying...")
+    
+    # Forced to override parent method
+    def move(self) -> None:
+        self.fly()  # Tightly coupled to fly implementation
+
+class Penguin(Bird):
+    # Oops! Penguins can't fly, but they inherit fly()
+    def fly(self) -> None:
+        raise NotImplementedError("Can't fly!")
+```
+
+## Composition Over Inheritance
+
+Instead of inheritance, prefer composition by:
+1. Breaking down functionality into small, focused components
+2. Combining components to build complex behavior
+3. Using protocols to define contracts
+
+### Example: Better Design with Composition
+
+```python
+from typing import Protocol
+from dataclasses import dataclass
+
+class Movable(Protocol):
+    def move(self) -> None:
+        ...
+
+class Soundable(Protocol):
+    def make_sound(self) -> None:
+        ...
+
+@dataclass
+class Flying:
+    def move(self) -> None:
+        print("Flying through the air")
+
+@dataclass
+class Walking:
+    def move(self) -> None:
+        print("Walking on the ground")
+
+@dataclass
+class EagleSound:
+    def make_sound(self) -> None:
+        print("Screech!")
+
+@dataclass
+class PenguinSound:
+    def make_sound(self) -> None:
+        print("Honk!")
+
+class Bird:
+    def __init__(self, movement: Movable, sound: Soundable):
+        self._movement = movement
+        self._sound = sound
+
+    def move(self) -> None:
+        self._movement.move()
+
+    def make_sound(self) -> None:
+        self._sound.make_sound()
+
+# Easy to create different types of birds
+eagle = Bird(movement=Flying(), sound=EagleSound())
+penguin = Bird(movement=Walking(), sound=PenguinSound())
+```
+
+## Modules vs Protocols vs Classes
+
+Each has its specific use case:
+
+### Modules
+- Organize code into namespaces
+- Group related functionality
+- Control visibility and access
+- Share code between files
+
+```python
+# math_utils.py
+def add(a: float, b: float) -> float:
+    return a + b
+
+def subtract(a: float, b: float) -> float:
+    return a - b
+
+# usage.py
+from math_utils import add, subtract
+```
+
+### Protocols
+- Define contracts
+- Enable duck typing
+- Document expected behavior
+- Support composition
+
+```python
+from typing import Protocol, TypeVar
+
+T = TypeVar('T')
+
+class Repository(Protocol[T]):
+    def find(self, id: str) -> T:
+        ...
+    
+    def save(self, item: T) -> None:
+        ...
+    
+    def delete(self, id: str) -> None:
+        ...
+
+# Multiple implementations possible
+class SQLRepository:
+    def find(self, id: str) -> T:
+        # Implementation
+        ...
+
+class MongoRepository:
+    def find(self, id: str) -> T:
+        # Different implementation
+        ...
+```
+
+### Classes
+- Encapsulate state
+- Implement behavior
+- Manage lifecycles
+- Create instances
+
+```python
+from dataclasses import dataclass
+from typing import Protocol
+
+class User(Protocol):
+    id: str
+    name: str
+
+class UserService:
+    def __init__(self, repository: Repository[User]):
+        self._repository = repository
+
+    async def create_user(self, data: dict) -> User:
+        # Validate
+        # Create user
+        # Save to repository
+        return user
+```
+
+## Exercises
+
+1. **Class Design Exercise**
+   - Identify scenarios where classes are appropriate/inappropriate
+   - Refactor a class-heavy codebase to use more functions
+   - Document the benefits and tradeoffs
+
+2. **Inheritance Refactoring**
+   - Take a deep inheritance hierarchy
+   - Refactor it to use composition
+   - Compare the flexibility and maintainability
+
+3. **Protocol Design**
+   - Design protocols for a system
+   - Implement them using both inheritance and composition
+   - Evaluate which approach is more maintainable
+
+## Key Takeaways
+
+- Use classes only when you need to manage state and behavior together
+- Prefer composition over inheritance for code reuse
+- Use protocols to define contracts and enable composition
+- Keep modules focused and cohesive
+- Think in terms of behaviors rather than types
+
+## Additional Resources
+
+- [Python Data Classes](https://docs.python.org/3/library/dataclasses.html)
+- [Python Protocols](https://peps.python.org/pep-0544/)
+- [Composition vs Inheritance in Python](https://realpython.com/inheritance-composition-python/) 

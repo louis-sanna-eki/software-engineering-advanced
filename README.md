@@ -1,51 +1,64 @@
-# Python Code Style Formation
+# Advanced Software Engineering Principles
 
-A comprehensive guide to Python best practices, code style, and development workflows. This guide covers essential topics that every Python developer should know to write clean, maintainable, and efficient code.
+A comprehensive guide to advanced software engineering concepts, design patterns, and best practices. This guide covers essential topics that every senior developer should understand to write maintainable, scalable, and robust code.
 
 ## Topics Covered
 
-### 1. Type Hints
-- Basic and advanced type annotations
-- Generic types and protocols
-- Async typing patterns
-- Migration strategies from untyped code
-- Type checking configuration
+### 1. Clean Code Principles
+- Dream Code and Happy Path
+- Baby Steps in Development
+- Single Responsibility Principle
+- Code Organization and Readability
+- Early Return Pattern
 
-### 2. Testing
-- Test organization and structure
-- Pytest best practices
-- Async testing patterns
-- Database testing strategies
-- Integration and contract testing
-- Performance testing
+### 2. Object-Oriented Design
+- When to Use Classes (State Encapsulation)
+- Inheritance Pitfalls
+- Composition Over Inheritance
+- Module vs Interface vs Class
+- Design Pattern Selection
 
-### 3. Development Tooling
-- Environment management with Poetry and Conda
-- Code quality tools (Ruff, Pyright)
-- VS Code configuration and productivity
-- Debugging and profiling tools
-- Continuous Integration setup
+### 3. Functional Programming
+- Pure Functions
+- Side Effects Management
+- Interface Simplification
+- Null Object Pattern
+- Immutability
 
-### 4. Version Control
-- Git workflows and branching strategies
-- Conventional commits
-- Feature flags and versioning
-- Multi-team collaboration
-- Git automation and hooks
+### 4. Component-Based Architecture
+- Colocation Principles
+- Loose Coupling
+- Open-Closed Principle
+- Vertical vs Horizontal Splitting
+- Component Boundaries
 
-### 5. Naming Conventions
-- Python naming standards
-- Domain-specific patterns
-- Async/concurrent code naming
-- Large codebase organization
-- Refactoring strategies
+### 5. Dependency Management
+- Dependency Inversion
+- Dependency Injection
+- Local Context
+- Managing External Dependencies
+- Circular Dependencies Prevention
+
+### 6. Code Complexity
+- Cyclomatic Complexity
+- Decision Trees
+- Keeping Complexity Low
+- Code Refactoring Strategies
+- DRY vs WET Principles
+
+### 7. Asynchronous Programming
+- Async Patterns and Best Practices
+- Event-Driven Architecture
+- Error Handling in Async Code
+- Performance Considerations
+- Testing Async Code
 
 ## Getting Started
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/code-style-formation.git
-cd code-style-formation
+git clone https://github.com/yourusername/advanced-software-engineering.git
+cd advanced-software-engineering
 ```
 
 2. Install dependencies:
