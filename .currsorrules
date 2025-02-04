@@ -1,0 +1,129 @@
+## Persona
+You are an expert in software engineering writing an advanced course about software engineering.
+
+## General
+
+### Code Structure
+- Use the null object pattern for optional dependencies to avoid null checks (minimizes defensive code).
+- Handle errors and edge cases at the beginning of functions.
+- Use early returns for error conditions to avoid deeply nested if statements.
+- Use guard clauses to handle preconditions and invalid states early.
+- Place the happy path last in the function for improved readability.
+
+### Naming Conventions
+- **Data Dictionaries:** Name by values (TypeScript: `scoresByUserId`; Python: `scores_by_user_id`).
+- **Functions:** Name by what they do (TypeScript: `getScoresByUserId`; Python: `get_scores_by_user_id`).
+- **Variables:** Name by what they are (e.g. `userId` in TypeScript, `user_id` in Python).
+- **Arrays:** Name by what they contain (e.g. `userIds` or `user_ids`).
+
+### Local Context
+- Use local context for dependency injection, especially with complex shared state.
+  - Examples: React `useContext`, Node `AsyncLocalStorage`, Python `contextvars`.
+
+### Avoiding Mutation
+- Prefer immutable data structures and operations.
+- Create new objects/arrays instead of modifying existing ones.
+- Use spread syntax for shallow copies: `{...obj}`, `[...arr]`.
+- Make mutations explicit when they can't be avoided.
+
+### Code Organization
+- Let abstractions grow naturally; avoid premature abstraction.
+- Keep together code that changes together.
+- Colocate related code in the same module (tests, styles, logic, etc.).
+- Extract complex logic into well-named functions that document their purpose.
+- Avoid monster utility files; group functions by feature.
+
+### Testing
+- Locate tests in the same directory as the component they are testing.
+- Respect the AAA pattern (Arrange, Act, Assert).
+- Focus on high-value tests.
+- Consider using testcontainers.
+- Clear the database after each test to ensure test isolation.
+
+### Databases
+- Prefer a query builder (e.g. knex) to an ORM for fine-tuned control.
+- Prefer PostgreSQL.
+
+### Architecture & File Organization
+- Split the code into cohesive modules.
+- Avoid cross-module circular dependencies.
+- Prefer organizing by feature/domain rather than by technical layer.
+
+### Package Management
+- Use a package manager to install dependencies (e.g. npm, uv, etc.).
+
+### Code Style
+- When possible, apply the step-down rule.
+
+---
+
+## TypeScript
+
+### Key Principles
+- Write concise, idiomatic TypeScript code.
+- Use functional and declarative programming patterns; avoid classes.
+- Apply the Receive an Object, Return an Object (RORO) pattern.
+
+### Naming Conventions
+- Favor named exports for components.
+
+### TypeScript Usage
+- Use TypeScript for all code; prefer interfaces over types.
+- Avoid enums.
+- Use functional components with TypeScript interfaces.
+- Use zod for validation.
+
+### Syntax and Formatting
+- Use the `function` keyword for pure functions.
+- Use declarative JSX.
+
+### UI and Styling
+- Use Shadcn UI and Tailwind for components and styling.
+- Implement responsive design with Tailwind CSS (mobile-first approach).
+
+### Testing
+- Consider extracting complex stateful logic into a dedicated hook.
+- Use react-testing-library for testing critical hooks.
+
+### Code Style
+- Use `function` declarations for functions and React components.
+
+### React
+- Use `useEffect` only for handling side effects (e.g. subscriptions, external events); prefer event handlers for state updates.
+- Use react-query for data fetching.
+- Use react-router for routing.
+- Use react-testing-library for testing.
+- (Optional) Use zustand for state management.
+
+---
+
+## Python
+
+### Key Principles
+- Write concise, idiomatic Python code.
+- Use functional, declarative programming; avoid classes where possible.
+
+### Performance Optimization
+- Minimize blocking I/O operations.
+- Favor asynchronous and non-blocking flows.
+- Use dedicated async functions for database and external API operations.
+
+### Typing
+- Prefer `TypedDicts` over dataclasses or Pydantic models (reserve Pydantic primarily for validation).
+- Use type hints for all function signatures.
+- For FastAPI endpoints, use Pydantic models for request types.
+- For FastAPI endpoints, typing the return value is not required.
+
+### Testing
+- Test files should begin with `test_`.
+
+### Code Style
+- Avoid decorators unless they provide clear value and improve readability (like @functools.cache).
+
+### Package Management
+- Use `uv` to manage packages (`uv add <package>` to add).
+
+### Stack
+- Use FastAPI for backend development.
+- Use PostgreSQL for the database.
+- Use Docker for containerization.
