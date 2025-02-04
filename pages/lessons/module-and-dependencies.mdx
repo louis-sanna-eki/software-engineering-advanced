@@ -135,3 +135,96 @@ class SQLOrderStorage:
         # Implementation details here
         return [{"order_id": "1", "user_id": user_id}]
 ```
+
+## Local Context: Enabling Dependency Injection
+
+Local context is a powerful tool that enables proper dependency injection and inversion of control. It helps solve the dependency problems we discussed earlier in a clean way.
+
+### From Direct Dependencies to Injection
+
+Remember our earlier problem with circular dependencies:
+```python
+# ❌ Bad: Direct import creates tight coupling
+from orders.domain import get_user_orders
+
+def get_user_details(user_id: str) -> dict:
+    orders = get_user_orders(user_id)  # Direct dependency
+    return {"id": user_id, "orders": orders}
+```
+
+Using local context, we can inject dependencies instead:
+```python
+from typing import Protocol, TypedDict
+
+# Define what we need, not where it comes from
+class OrderFetcher(Protocol):
+    def get_orders(self, user_id: str) -> list[dict]: ...
+
+# Context carries our dependencies
+class UserContext(TypedDict):
+    order_fetcher: OrderFetcher
+    debug: bool
+
+def get_user_details(user_id: str, ctx: UserContext) -> dict:
+    # Dependency comes from context, not import
+    orders = ctx["order_fetcher"].get_orders(user_id)
+    return {"id": user_id, "orders": orders}
+
+# Usage with different implementations
+def main():
+    # Development context
+    with user_context(
+        order_fetcher=lambda user_id: [],  # Mock implementation
+        debug=True
+    ) as ctx:
+        get_user_details("123", ctx)
+```
+
+### Why This Matters
+
+1. **Inversion of Control**
+   - Business logic defines what it needs (interfaces)
+   - Context provides concrete implementations
+   - Dependencies point inward toward core logic
+
+2. **Flexible Assembly**
+   - Swap implementations without changing code
+   - Mix and match modules freely
+   - No circular dependencies possible
+
+3. **Testing and Development**
+   ```python
+   # Test with mocks
+   test_ctx = {
+       "order_fetcher": lambda user_id: [{"id": "test"}],
+       "debug": True
+   }
+   
+   # Production with real implementation
+   prod_ctx = {
+       "order_fetcher": SQLOrderStorage(),
+       "debug": False
+   }
+   ```
+
+## Key Takeaways
+
+1. **Modularization** is about breaking down complexity
+   - Each module should have a single responsibility
+   - Modules should be independently maintainable
+
+2. **Dependencies** determine system flexibility
+   - Avoid circular dependencies at all costs
+   - Use interfaces to decouple modules
+   - Inject dependencies through context
+
+3. **Interfaces** are contracts between modules
+   - They define what modules need
+   - They hide implementation details
+   - Context connects interfaces to implementations
+
+## Additional Resources
+
+- [Clean Architecture by Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [Domain-Driven Design](https://martinfowler.com/bliki/DomainDrivenDesign.html)
+- [SOLID Principles](https://en.wikipedia.org/wiki/SOLID)
