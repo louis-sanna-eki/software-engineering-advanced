@@ -2,6 +2,8 @@
 
 Asynchronous programming helps us handle operations that might take time without blocking execution. This lesson explores patterns for writing maintainable async code.
 
+![Asynchronous vs Synchronous Programming](/async.png)
+
 ## Async Patterns
 
 ### 1. Task-Based Programming
@@ -78,166 +80,6 @@ async def get_products(ids: List[str], chunk_size: int = 5) -> List[ProductInfo]
     return products
 ```
 
-## Event-Driven Architecture
-
-Use events to handle complex async workflows:
-
-```python
-from typing import TypedDict, Protocol, Callable, Awaitable, List
-from decimal import Decimal
-import asyncio
-
-# Define events
-class OrderEvent(TypedDict):
-    order_id: str
-    total: Decimal
-
-class PaymentEvent(TypedDict):
-    order_id: str
-    payment_id: str
-    status: str
-
-# Event handlers
-async def handle_order_created(event: OrderEvent) -> None:
-    payment = await initiate_payment(event["total"])
-    await publish_event({
-        "order_id": event["order_id"],
-        "payment_id": payment["id"],
-        "status": payment["status"]
-    })
-
-async def handle_payment_completed(event: PaymentEvent) -> None:
-    await update_order_status(event["order_id"], "paid")
-    await send_confirmation(event["order_id"])
-
-# Event dispatcher
-class EventDispatcher:
-    def __init__(self):
-        self.handlers: dict[str, List[Callable]] = {}
-    
-    def subscribe(self, event_type: str, handler: Callable) -> None:
-        if event_type not in self.handlers:
-            self.handlers[event_type] = []
-        self.handlers[event_type].append(handler)
-    
-    async def publish(self, event_type: str, event: dict) -> None:
-        if event_type in self.handlers:
-            tasks = [
-                handler(event)
-                for handler in self.handlers[event_type]
-            ]
-            await asyncio.gather(*tasks)
-
-# Usage
-dispatcher = EventDispatcher()
-dispatcher.subscribe("order_created", handle_order_created)
-dispatcher.subscribe("payment_completed", handle_payment_completed)
-
-async def create_order(order: dict) -> None:
-    # Process order
-    await dispatcher.publish("order_created", {
-        "order_id": order["id"],
-        "total": order["total"]
-    })
-```
-
-## Error Handling in Async Code
-
-Handle errors gracefully and maintain the happy path:
-
-```python
-from typing import TypedDict, Protocol, Optional
-from decimal import Decimal
-import asyncio
-from datetime import datetime, timedelta
-
-class PaymentResult(TypedDict):
-    success: bool
-    error: Optional[str]
-    retry_after: Optional[datetime]
-
-# ❌ Bad: Nested error handling
-async def process_payment(amount: Decimal) -> PaymentResult:
-    try:
-        async with session.post("/payment", json={"amount": amount}) as resp:
-            if resp.status == 200:
-                return {"success": True, "error": None, "retry_after": None}
-            elif resp.status == 429:
-                return {
-                    "success": False,
-                    "error": "Rate limited",
-                    "retry_after": datetime.now() + timedelta(minutes=5)
-                }
-            else:
-                try:
-                    error = await resp.json()
-                    return {
-                        "success": False,
-                        "error": error["message"],
-                        "retry_after": None
-                    }
-                except:
-                    return {
-                        "success": False,
-                        "error": "Unknown error",
-                        "retry_after": None
-                    }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "retry_after": None
-        }
-
-# ✅ Better: Separate error handling
-async def make_payment_request(amount: Decimal) -> dict:
-    async with session.post("/payment", json={"amount": amount}) as resp:
-        resp.raise_for_status()
-        return await resp.json()
-
-async def handle_rate_limit(resp: Response) -> PaymentResult:
-    retry_after = datetime.now() + timedelta(minutes=5)
-    return {
-        "success": False,
-        "error": "Rate limited",
-        "retry_after": retry_after
-    }
-
-async def handle_error_response(resp: Response) -> PaymentResult:
-    try:
-        error = await resp.json()
-        return {
-            "success": False,
-            "error": error["message"],
-            "retry_after": None
-        }
-    except:
-        return {
-            "success": False,
-            "error": "Unknown error",
-            "retry_after": None
-        }
-
-async def process_payment(amount: Decimal) -> PaymentResult:
-    try:
-        result = await make_payment_request(amount)
-        return {
-            "success": True,
-            "error": None,
-            "retry_after": None
-        }
-    except RateLimitError as e:
-        return await handle_rate_limit(e.response)
-    except HTTPError as e:
-        return await handle_error_response(e.response)
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "retry_after": None
-        }
-```
-
 ## Performance Considerations
 
 ### 1. Connection Pooling
@@ -280,6 +122,8 @@ async def process_users(user_ids: List[str]) -> None:
 
 ### 2. Resource Management
 
+Semaphores control access to limited resources in async applications, preventing resource exhaustion.
+
 ```python
 from typing import TypedDict, AsyncIterator
 import asyncio
@@ -294,18 +138,39 @@ class DatabasePool:
         async with self.semaphore:
             yield
 
-# Usage
-pool = DatabasePool(max_size=5)
+# Example: Database Connection Pool
+pool = DatabasePool(max_size=3)
 
-async def process_item(item: dict) -> None:
+async def process_item(item_id: int) -> None:
     async with pool.acquire():
-        # Only 5 concurrent DB operations
-        await save_to_db(item)
+        await slow_database_operation(item_id)
 
-async def process_items(items: List[dict]) -> None:
-    tasks = [process_item(item) for item in items]
+async def process_many_items(items: List[int]) -> None:
+    tasks = [process_item(i) for i in items]
     await asyncio.gather(*tasks)
+
+# Example: API Rate Limiting
+class RateLimitedAPI:
+    def __init__(self, requests_per_second: int):
+        self.semaphore = asyncio.Semaphore(requests_per_second)
+        
+    async def make_request(self, endpoint: str) -> dict:
+        async with self.semaphore:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(endpoint) as response:
+                    await asyncio.sleep(1)  # Rate limit delay
+                    return await response.json()
+
+# Usage
+api = RateLimitedAPI(requests_per_second=2)
+endpoints = [f"/data/{i}" for i in range(5)]
+results = await asyncio.gather(*[api.make_request(e) for e in endpoints])
 ```
+
+Common use cases for semaphores:
+1. Database connection pooling
+2. Rate limiting API requests
+3. Controlling access to shared resources
 
 ## Testing Async Code
 
