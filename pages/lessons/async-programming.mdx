@@ -4,6 +4,55 @@ Asynchronous programming helps us handle operations that might take time without
 
 ![Asynchronous vs Synchronous Programming](/async.png)
 
+## Async vs Threading
+
+Both async and threading enable concurrent execution, but they handle it differently:
+
+```python
+import threading
+import asyncio
+from time import sleep
+from typing import List
+
+# Threading: Explicit coordination
+shared_data = []
+lock = threading.Lock()
+
+def thread_worker(item: str) -> None:
+    with lock:
+        shared_data.append(item)
+        sleep(1)  # Blocks other threads
+        print(f"Processed {item}")
+
+def process_with_threads(items: List[str]) -> None:
+    threads = []
+    for item in items:
+        thread = threading.Thread(target=thread_worker, args=(item,))
+        threads.append(thread)
+        thread.start()
+    
+    for thread in threads:
+        thread.join()
+
+# Async: Cooperative scheduling
+async def async_worker(item: str) -> None:
+    shared_data.append(item)
+    await asyncio.sleep(1)  # Allows other tasks to run
+    print(f"Processed {item}")
+
+async def process_with_async(items: List[str]) -> None:
+    await asyncio.gather(*[
+        async_worker(item) for item in items
+    ])
+```
+
+Key differences:
+1. Threading uses system-level threads, async uses a single thread with an event loop
+2. Threading requires explicit coordination (locks), async uses cooperative scheduling
+3. Threading is better for CPU-bound tasks, async for I/O-bound operations
+4. Threading can run truly parallel on multiple cores, async runs concurrently on one core
+5. Async code is typically easier to write and reason about - prefer it for I/O-bound tasks unless you specifically need multi-core processing
+
 ## Async Patterns
 
 ### 1. Task-Based Programming
