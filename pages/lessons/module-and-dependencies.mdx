@@ -75,116 +75,158 @@ When modules depend on each other cyclically:
 
 ## 3. Interfaces: Contracts Between Modules
 
-Interfaces solve the dependency problem by defining contracts between modules. They specify:
+Interfaces define contracts between modules. They specify:
+- What data structures are expected
 - What operations are available
-- What data is required
 - What results to expect
 
-Think of interfaces like a restaurant menu:
-- The menu (interface) defines what you can order
-- You don't need to know how the kitchen (implementation) works
-- The kitchen can be reorganized without affecting customers
-
-### Example: Clear Interface Contract
+In Python, we can use TypedDict to define clear data contracts:
 
 ```python
-from typing import Protocol, List
+from typing import TypedDict, Literal, List
+from decimal import Decimal
 
-# Define the contract
-class OrderStorage(Protocol):
-    def save(self, order: Order) -> None:
-        """Save an order to storage.
-        
-        Args:
-            order: The order to save
-            
-        Raises:
-            StorageError: If save fails
-        """
-        ...
-    
-    def get(self, order_id: str) -> Order:
-        """Retrieve an order by ID.
-        
-        Args:
-            order_id: The order's unique identifier
-            
-        Returns:
-            The order if found
-            
-        Raises:
-            NotFoundError: If order doesn't exist
-        """
-        ...
+# Define clear data contracts
+class OrderItem(TypedDict):
+    product_id: str
+    quantity: int
+    unit_price: Decimal
 
-# Implementation follows the contract
-def get_user_details(
-    user_id: str,
-    order_storage: OrderStorage  # Depend on interface, not implementation
-) -> dict:
-    orders = order_storage.get_orders(user_id)
-    return {"id": user_id, "orders": orders}
+class Order(TypedDict):
+    id: str
+    items: List[OrderItem]
+    status: Literal["pending", "paid", "shipped"]
+    total: Decimal
+
+# Modules work with these contracts
+def calculate_total(items: List[OrderItem]) -> Decimal:
+    return sum(item["unit_price"] * item["quantity"] for item in items)
+
+def validate_order(order: Order) -> bool:
+    return (
+        len(order["items"]) > 0 and
+        order["total"] == calculate_total(order["items"]) and
+        order["status"] in ["pending", "paid", "shipped"]
+    )
 ```
 
-## 4. Local Context: Managing Dependencies
+These contracts make it clear:
+- Exactly what shape of data is expected
+- What fields are required
+- What values are allowed
 
-Local context provides a clean way to manage dependencies through injection. It connects modules while respecting their interfaces.
+## 4. Context: Managing Dependencies
 
-### From Direct Dependencies to Injection
+Python's contextvars provide a clean way to manage dependencies. They allow modules to access dependencies without passing them explicitly through every function call.
 
 ```python
-from typing import Protocol, TypedDict
+from contextvars import ContextVar
+from typing import TypedDict, Protocol, Optional
+from decimal import Decimal
 
-# Define what we need (interface)
-class OrderFetcher(Protocol):
-    def get_orders(self, user_id: str) -> list[dict]: ...
+# Define interfaces
+class PaymentProcessor(Protocol):
+    def charge(self, amount: Decimal) -> str: ...
 
-# Context carries dependencies
-class UserContext(TypedDict):
-    order_fetcher: OrderFetcher
+class EmailSender(Protocol):
+    def send(self, to: str, subject: str) -> None: ...
+
+# Define app context
+class AppContext(TypedDict):
+    payment: PaymentProcessor
+    email: EmailSender
     debug: bool
 
-def get_user_details(user_id: str, ctx: UserContext) -> dict:
-    # Use dependency through context
-    orders = ctx["order_fetcher"].get_orders(user_id)
-    return {"id": user_id, "orders": orders}
+# Create context variable
+app_context: ContextVar[AppContext] = ContextVar('app_context')
 
-# Wire different implementations
+# Business logic uses context
+def process_order(user_id: str, amount: Decimal) -> Optional[str]:
+    # Get dependencies from context
+    ctx = app_context.get()
+    
+    if ctx["debug"]:
+        print(f"Processing order for {user_id}: ${amount}")
+    
+    try:
+        # Use dependencies through context
+        payment_id = ctx["payment"].charge(amount)
+        ctx["email"].send(
+            to=f"{user_id}@example.com",
+            subject=f"Order confirmed: {payment_id}"
+        )
+        return payment_id
+    except Exception as e:
+        if ctx["debug"]:
+            print(f"Error processing order: {e}")
+        return None
+
+# Set up development context
+def development_context():
+    # Mock implementations
+    class TestPayment:
+        def charge(self, amount: Decimal) -> str:
+            return f"test_payment_{amount}"
+    
+    class TestEmail:
+        def send(self, to: str, subject: str) -> None:
+            print(f"Would send {subject} to {to}")
+    
+    # Set context for this scope
+    token = app_context.set({
+        "payment": TestPayment(),
+        "email": TestEmail(),
+        "debug": True
+    })
+    
+    try:
+        yield
+    finally:
+        app_context.reset(token)
+
+# Usage
+from contextlib import contextmanager
+
+@contextmanager
+def production_context():
+    # Real implementations
+    token = app_context.set({
+        "payment": StripePayment(),
+        "email": SMTPEmail(),
+        "debug": False
+    })
+    try:
+        yield
+    finally:
+        app_context.reset(token)
+
+# Use in different environments
 def main():
-    # Development version
-    with user_context(
-        order_fetcher=lambda user_id: [],  # Mock implementation
-        debug=True
-    ) as ctx:
-        get_user_details("123", ctx)
+    # Development
+    with development_context():
+        process_order("test_user", Decimal("99.99"))
+    
+    # Production
+    with production_context():
+        process_order("real_user", Decimal("99.99"))
 ```
 
 ### Why Context Matters
 
-1. **Inversion of Control**
-   - Business logic defines what it needs (interfaces)
-   - Context provides concrete implementations
-   - Dependencies point inward toward core logic
+1. **Clean Dependency Access**
+   - No need to pass dependencies through every function
+   - Dependencies available where needed
+   - Clear separation of business logic and infrastructure
 
-2. **Flexible Assembly**
-   - Swap implementations without changing code
-   - Mix and match modules freely
-   - No circular dependencies possible
+2. **Environment Switching**
+   - Easy to switch between development/production
+   - Testing becomes trivial
+   - Can modify behavior globally
 
-3. **Testing and Development**
-   ```python
-   # Test with mocks
-   test_ctx = {
-       "order_fetcher": lambda user_id: [{"id": "test"}],
-       "debug": True
-   }
-   
-   # Production with real implementation
-   prod_ctx = {
-       "order_fetcher": SQLOrderStorage(),
-       "debug": False
-   }
-   ```
+3. **Resource Management**
+   - Context managers handle cleanup
+   - Resources are properly scoped
+   - State is predictable
 
 ## Key Takeaways
 
@@ -199,17 +241,17 @@ def main():
    - Direction of dependencies matters
 
 3. **Interfaces** define contracts
-   - Specify what, not how
-   - Hide implementation details
-   - Enable module independence
+   - Use TypedDict for clear data contracts
+   - Make requirements explicit
+   - Enable type checking
 
-4. **Local Context** manages assembly
-   - Injects dependencies cleanly
-   - Enables easy testing
-   - Keeps modules decoupled
+4. **Context** manages dependencies
+   - Use contextvars for clean dependency access
+   - Switch environments easily
+   - Maintain proper scoping
 
 ## Additional Resources
 
 - [Clean Architecture by Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [Domain-Driven Design](https://martinfowler.com/bliki/DomainDrivenDesign.html)
-- [SOLID Principles](https://en.wikipedia.org/wiki/SOLID)
+- [Python contextvars](https://docs.python.org/3/library/contextvars.html)
+- [Type Hints in Python](https://docs.python.org/3/library/typing.html)
