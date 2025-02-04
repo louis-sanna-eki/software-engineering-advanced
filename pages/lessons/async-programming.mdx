@@ -174,52 +174,63 @@ async def process_users(user_ids: List[str]) -> None:
 Semaphores control access to limited resources in async applications, preventing resource exhaustion.
 
 ```python
-from typing import TypedDict, AsyncIterator
-import asyncio
-from contextlib import asynccontextmanager
-
-class DatabasePool:
-    def __init__(self, max_size: int = 10):
-        self.semaphore = asyncio.Semaphore(max_size)
+# Example: Simple OpenAI Rate Limiting
+async def create_openai_client(api_key: str, max_concurrent: int = 2):
+    # Limit concurrent requests
+    sem = asyncio.Semaphore(max_concurrent)
     
-    @asynccontextmanager
-    async def acquire(self) -> AsyncIterator[None]:
-        async with self.semaphore:
-            yield
-
-# Example: Database Connection Pool
-pool = DatabasePool(max_size=3)
-
-async def process_item(item_id: int) -> None:
-    async with pool.acquire():
-        await slow_database_operation(item_id)
-
-async def process_many_items(items: List[int]) -> None:
-    tasks = [process_item(i) for i in items]
-    await asyncio.gather(*tasks)
-
-# Example: API Rate Limiting
-class RateLimitedAPI:
-    def __init__(self, requests_per_second: int):
-        self.semaphore = asyncio.Semaphore(requests_per_second)
-        
-    async def make_request(self, endpoint: str) -> dict:
-        async with self.semaphore:
+    async def complete_prompt(prompt: str) -> dict:
+        async with sem:  # Control concurrent requests
             async with aiohttp.ClientSession() as session:
-                async with session.get(endpoint) as response:
-                    await asyncio.sleep(1)  # Rate limit delay
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "model": "gpt-3.5-turbo",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                # Add small delay to respect rate limits
+                await asyncio.sleep(0.5)  
+                async with session.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers=headers,
+                    json=data
+                ) as response:
                     return await response.json()
+    
+    return complete_prompt
 
-# Usage
-api = RateLimitedAPI(requests_per_second=2)
-endpoints = [f"/data/{i}" for i in range(5)]
-results = await asyncio.gather(*[api.make_request(e) for e in endpoints])
-```
+# Example usage with gather
+async def process_prompts(prompts: List[str], api_key: str) -> List[dict]:
+    complete_prompt = await create_openai_client(api_key)
+    tasks = [complete_prompt(prompt) for prompt in prompts]
+    return await asyncio.gather(*tasks)
+
+# Example usage with as_completed
+async def process_prompts_as_completed(prompts: List[str], api_key: str) -> List[dict]:
+    complete_prompt = await create_openai_client(api_key)
+    tasks = [complete_prompt(prompt) for prompt in prompts]
+    results = []
+    for task in asyncio.as_completed(tasks):
+        result = await task
+        results.append(result)
+    return results
+
+# Example prompts
+prompts = [
+    "Explain Python to a beginner",
+    "What is asyncio?",
+    "How do semaphores work?",
+]
+
+# Run with proper rate limiting
+responses = await process_prompts(prompts, "your-api-key-here")
 
 Common use cases for semaphores:
-1. Database connection pooling
-2. Rate limiting API requests
-3. Controlling access to shared resources
+1. Rate limiting API requests
+2. Controlling access to shared resources
+3. Managing concurrent network connections
 
 ## Testing Async Code
 
