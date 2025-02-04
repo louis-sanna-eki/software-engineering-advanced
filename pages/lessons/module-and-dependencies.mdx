@@ -2,11 +2,11 @@
 
 ![Modules, Interfaces, and Dependencies](/modules.png)
 
-Complex systems are built on two fundamental architectural concepts: **Modules** and **Dependencies**. Understanding these concepts is crucial for building maintainable software.
+Complex systems are built on fundamental architectural concepts that help manage complexity. Let's explore each one:
 
-## 1. Modules: Divide to Better Reign
+## 1. Modules: Divide and Conquer
 
-The first pillar of system architecture is modularization - breaking down complex systems into smaller, manageable pieces. This principle follows the age-old wisdom of "divide and conquer."
+The first pillar is modularization - breaking down complex systems into smaller, manageable pieces. This follows the age-old wisdom of "divide and conquer."
 
 ### Benefits of Modularization
 
@@ -42,24 +42,55 @@ def calculate_total(items: list[dict]) -> Decimal:
     return sum(item["price"] * item["quantity"] for item in items)
 ```
 
-## 2. Dependencies: The Art of Assembly
+## 2. Dependencies: Assembling Modules
 
-While modules help us break down complexity, dependencies define how these modules work together. However, poorly managed dependencies can negate all the benefits of modularization.
+Once we have modules, we need to connect them. Dependencies define these connections - how modules use each other's functionality.
 
-### Interfaces: Contracts Between Modules
+### The Dependency Problem
 
-Interfaces serve as contracts that define how modules can communicate with each other. They specify:
+Dependencies can quickly become problematic. The main challenge is avoiding cycles:
+
+```python
+# ❌ Bad: Circular Dependencies
+# users/domain.py
+from orders.domain import get_user_orders  # Depends on orders
+
+def get_user_details(user_id: str) -> dict:
+    orders = get_user_orders(user_id)  # Circular dependency!
+    return {"id": user_id, "orders": orders}
+
+# orders/domain.py
+from users.domain import get_user_details  # Depends on users
+
+def get_user_orders(user_id: str) -> list:
+    user = get_user_details(user_id)  # Circular dependency!
+    return [{"order_id": "1", "user": user}]
+```
+
+When modules depend on each other cyclically:
+- They effectively become one large module
+- Changes in one affect all others
+- Testing becomes difficult
+- Reuse becomes impossible
+
+## 3. Interfaces: Contracts Between Modules
+
+Interfaces solve the dependency problem by defining contracts between modules. They specify:
 - What operations are available
 - What data is required
 - What results to expect
 
-Think of interfaces like a contract between a restaurant and its customers:
+Think of interfaces like a restaurant menu:
 - The menu (interface) defines what you can order
 - You don't need to know how the kitchen (implementation) works
 - The kitchen can be reorganized without affecting customers
 
+### Example: Clear Interface Contract
+
 ```python
-# A clear contract for storing orders
+from typing import Protocol, List
+
+# Define the contract
 class OrderStorage(Protocol):
     def save(self, order: Order) -> None:
         """Save an order to storage.
@@ -85,94 +116,42 @@ class OrderStorage(Protocol):
             NotFoundError: If order doesn't exist
         """
         ...
-```
 
-### The Dependency Problem
-
-The main challenge with dependencies is avoiding cycles. When modules depend on each other cyclically, they effectively become one large, tightly coupled module.
-
-### ❌ Bad: Circular Dependencies
-
-```python
-# users/domain.py
-from orders.domain import get_user_orders  # Depends on orders
-
-def get_user_details(user_id: str) -> dict:
-    orders = get_user_orders(user_id)  # Circular dependency!
-    return {"id": user_id, "orders": orders}
-
-# orders/domain.py
-from users.domain import get_user_details  # Depends on users
-
-def get_user_orders(user_id: str) -> list:
-    user = get_user_details(user_id)  # Circular dependency!
-    return [{"order_id": "1", "user": user}]
-```
-
-### ✅ Good: Breaking Cycles with Interfaces
-
-The solution is to make dependencies point in one direction by using interfaces:
-
-```python
-from typing import Protocol, List
-from decimal import Decimal
-
-# core/interfaces.py
-class OrderStorage(Protocol):
-    def get_orders(self, user_id: str) -> List[dict]: ...
-
-# users/domain.py
+# Implementation follows the contract
 def get_user_details(
     user_id: str,
-    order_storage: OrderStorage  # Depend on interface
+    order_storage: OrderStorage  # Depend on interface, not implementation
 ) -> dict:
     orders = order_storage.get_orders(user_id)
     return {"id": user_id, "orders": orders}
-
-# orders/storage.py
-class SQLOrderStorage:
-    def get_orders(self, user_id: str) -> List[dict]:
-        # Implementation details here
-        return [{"order_id": "1", "user_id": user_id}]
 ```
 
-## Local Context: Enabling Dependency Injection
+## 4. Local Context: Managing Dependencies
 
-Local context is a powerful tool that enables proper dependency injection and inversion of control. It helps solve the dependency problems we discussed earlier in a clean way.
+Local context provides a clean way to manage dependencies through injection. It connects modules while respecting their interfaces.
 
 ### From Direct Dependencies to Injection
 
-Remember our earlier problem with circular dependencies:
-```python
-# ❌ Bad: Direct import creates tight coupling
-from orders.domain import get_user_orders
-
-def get_user_details(user_id: str) -> dict:
-    orders = get_user_orders(user_id)  # Direct dependency
-    return {"id": user_id, "orders": orders}
-```
-
-Using local context, we can inject dependencies instead:
 ```python
 from typing import Protocol, TypedDict
 
-# Define what we need, not where it comes from
+# Define what we need (interface)
 class OrderFetcher(Protocol):
     def get_orders(self, user_id: str) -> list[dict]: ...
 
-# Context carries our dependencies
+# Context carries dependencies
 class UserContext(TypedDict):
     order_fetcher: OrderFetcher
     debug: bool
 
 def get_user_details(user_id: str, ctx: UserContext) -> dict:
-    # Dependency comes from context, not import
+    # Use dependency through context
     orders = ctx["order_fetcher"].get_orders(user_id)
     return {"id": user_id, "orders": orders}
 
-# Usage with different implementations
+# Wire different implementations
 def main():
-    # Development context
+    # Development version
     with user_context(
         order_fetcher=lambda user_id: [],  # Mock implementation
         debug=True
@@ -180,7 +159,7 @@ def main():
         get_user_details("123", ctx)
 ```
 
-### Why This Matters
+### Why Context Matters
 
 1. **Inversion of Control**
    - Business logic defines what it needs (interfaces)
@@ -209,19 +188,25 @@ def main():
 
 ## Key Takeaways
 
-1. **Modularization** is about breaking down complexity
-   - Each module should have a single responsibility
-   - Modules should be independently maintainable
+1. **Modules** break down complexity
+   - Each module has a single responsibility
+   - Changes are localized
+   - Testing is simpler
 
-2. **Dependencies** determine system flexibility
-   - Avoid circular dependencies at all costs
-   - Use interfaces to decouple modules
-   - Inject dependencies through context
+2. **Dependencies** connect modules
+   - Avoid cycles at all costs
+   - Dependencies should be explicit
+   - Direction of dependencies matters
 
-3. **Interfaces** are contracts between modules
-   - They define what modules need
-   - They hide implementation details
-   - Context connects interfaces to implementations
+3. **Interfaces** define contracts
+   - Specify what, not how
+   - Hide implementation details
+   - Enable module independence
+
+4. **Local Context** manages assembly
+   - Injects dependencies cleanly
+   - Enables easy testing
+   - Keeps modules decoupled
 
 ## Additional Resources
 
