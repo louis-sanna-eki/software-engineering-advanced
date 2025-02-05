@@ -1,55 +1,45 @@
-# Component-Based Architecture: Building Maintainable Systems
+# Mastering Component-Based Architecture
 
 ![Component-based architecture: Build maintainable systems by breaking down code into independent, reusable components](/component.png)
 
-In modern software development, applications are becoming increasingly complex. Component-based architecture helps manage this complexity by breaking down systems into independent, reusable pieces that follow two key principles:
+Component-based architecture is essential for managing software complexity. By breaking applications into independent components, you enhance maintainability and reusability. Each component should:
 
-1. **Locality of Behavior**: The behavior of code should be obvious by looking at that unit of code
-2. **Co-location**: Related code should be placed as close as possible to where it's relevant
+1. Have a clear, single responsibility
+2. Expose a well-defined interface
+3. Be testable in isolation
+4. Follow locality of behavior
+5. Co-locate related code
 
-These principles naturally build on our functional programming approach and are especially valuable in:
-- Microservices architectures
-- Frontend frameworks like React
-- API-driven applications
+## Core Concepts in Component Architecture
 
-## What Makes a Good Component?
+### 1. Component Responsibility and Interface
 
-A good component:
-1. Has a clear, single responsibility
-2. Exposes a well-defined interface
-3. Can be tested in isolation
-4. Follows locality of behavior
-5. Co-locates related code
-
-### Example: Payment Processing Component with Co-located Behavior
+A component is responsible for a specific behavior and exposes a clear contract:
 
 ```python
-from typing import TypedDict, Literal, Protocol
+from typing import TypedDict, Protocol
 from decimal import Decimal
 
-# Co-locate all payment-related types together
+# Clear interface using TypedDict
 class PaymentRequest(TypedDict):
     amount: Decimal
     currency: str
     payment_method: Literal["card", "bank_transfer"]
     customer_id: str
 
-class PaymentResult(TypedDict):
-    success: bool
-    transaction_id: str
-    error_message: str
-
-class PaymentValidationError(Exception):
-    """Co-locate domain errors with their related types"""
-    pass
-
-# Protocol defines the interface - behavior is local to this component
+# Protocol defines the component contract
 class PaymentProcessor(Protocol):
     def process_payment(self, request: PaymentRequest) -> PaymentResult: ...
     def validate_request(self, request: PaymentRequest) -> None: ...
+```
 
+### 2. Locality of Behavior
+
+Each component's behavior should be obvious by looking at its code:
+
+```python
 def create_stripe_processor(api_key: str) -> PaymentProcessor:
-    """All Stripe-specific behavior is contained within this function"""
+    """All payment behavior contained in one place"""
     def validate_request(request: PaymentRequest) -> None:
         if request["amount"] <= Decimal("0"):
             raise PaymentValidationError("Amount must be positive")
@@ -57,10 +47,8 @@ def create_stripe_processor(api_key: str) -> PaymentProcessor:
             raise PaymentValidationError("Unsupported currency")
     
     def process_payment(request: PaymentRequest) -> PaymentResult:
-        # Validation is co-located with processing
         try:
             validate_request(request)
-            # Implementation details hidden
             return {
                 "success": True,
                 "transaction_id": "tx_123",
@@ -79,79 +67,58 @@ def create_stripe_processor(api_key: str) -> PaymentProcessor:
     })()
 ```
 
-## Benefits of Locality and Co-location
+### 3. Co-location of Related Code
 
-1. **Clear Behavior**: The behavior of each component is self-contained and obvious:
-   ```python
-   # ✅ Behavior is local and obvious
-   def create_order_processor(inventory: InventoryChecker, payments: PaymentProcessor):
-       """All order processing behavior in one place"""
-       def process_order(order: Order) -> OrderResult:
-           if not inventory.check_availability(order.items):
-               return OrderResult(success=False, error="Items unavailable")
-           if not payments.process_payment(order.total):
-               return OrderResult(success=False, error="Payment failed")
-           return OrderResult(success=True)
-       return process_order
+Keep related code together, regardless of its technical layer:
 
-   # ❌ Behavior spread across files
-   class OrderProcessor:
-       """Behavior split across multiple files/methods"""
-       def __init__(self):
-           self.inventory = None  # Set elsewhere
-           self.payments = None   # Set elsewhere
-           
-       def process(self, order):
-           if self.check_inventory():  # Implementation elsewhere
-               if self.handle_payment():  # Implementation elsewhere
-                   return Success()
-   ```
+```typescript
+// UserProfile.tsx - Everything related to user profiles in one place
+import { useState, useEffect } from 'react'
 
-2. **Co-located Tests**: Tests are placed next to the code they test:
-   ```
-   payment/
-     __init__.py
-     processor.py      # Payment processing code
-     processor_test.py # Tests right next to implementation
-     types.py         # Shared types for the module
-   ```
+// Types co-located with component
+interface User {
+    id: string
+    name: string
+    email: string
+}
 
-3. **Grouped by Feature**: Code that changes together stays together:
-   ```python
-   # All payment validation logic together
-   def validate_payment(request: PaymentRequest) -> None:
-       validate_amount(request.amount)
-       validate_currency(request.currency)
-       validate_method(request.method)
-   
-   def validate_amount(amount: Decimal) -> None:
-       if amount <= 0:
-           raise PaymentValidationError("Amount must be positive")
-   
-   def validate_currency(currency: str) -> None:
-       if currency not in SUPPORTED_CURRENCIES:
-           raise PaymentValidationError(f"Unsupported currency: {currency}")
-   ```
+// API logic next to component
+async function updateUser(userId: string, data: Partial<User>) {
+    const response = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+    })
+    return response.json()
+}
 
-## Loose Coupling Through Interfaces
+// Component with UI, state, and effects together
+export function UserProfile({ userId }: { userId: string }) {
+    const [user, setUser] = useState<User | null>(null)
+    
+    useEffect(() => {
+        fetch(`/api/users/${userId}`)
+            .then(r => r.json())
+            .then(setUser)
+    }, [userId])
+    
+    return (
+        <form onSubmit={e => updateUser(userId, user)}>
+            <input 
+                value={user?.name || ''} 
+                onChange={e => setUser(u => ({...u!, name: e.target.value}))}
+            />
+        </form>
+    )
+}
+```
 
-Components should depend on interfaces, not implementations:
+## Advanced Component Patterns
+
+### 1. Loose Coupling Through Interfaces
+
+Components should depend on abstractions:
 
 ```python
-from typing import TypedDict, Protocol, List
-from decimal import Decimal
-
-# Domain types
-class OrderItem(TypedDict):
-    product_id: str
-    quantity: int
-    price: Decimal
-
-class Order(TypedDict):
-    items: List[OrderItem]
-    total: Decimal
-    customer_id: str
-
 # Component interfaces
 class InventoryChecker(Protocol):
     def check_availability(self, items: List[OrderItem]) -> bool: ...
@@ -159,62 +126,44 @@ class InventoryChecker(Protocol):
 class PaymentProcessor(Protocol):
     def process_payment(self, amount: Decimal, customer_id: str) -> bool: ...
 
-class OrderNotifier(Protocol):
-    def notify_order_created(self, order: Order) -> None: ...
-
-# Order processor component
+# Components compose through interfaces
 def create_order_processor(
     inventory: InventoryChecker,
-    payments: PaymentProcessor,
-    notifier: OrderNotifier
+    payments: PaymentProcessor
 ):
-    def process_order(order: Order) -> bool:
-        # Each step is independent and testable
-        if not inventory.check_availability(order["items"]):
-            return False
-            
-        if not payments.process_payment(order["total"], order["customer_id"]):
-            return False
-            
-        notifier.notify_order_created(order)
-        return True
-            
+    def process_order(order: Order) -> OrderResult:
+        if not inventory.check_availability(order.items):
+            return OrderResult(success=False, error="Items unavailable")
+        if not payments.process_payment(order.total):
+            return OrderResult(success=False, error="Payment failed")
+        return OrderResult(success=True)
     return process_order
 ```
 
-## Colocation: Organize by Feature
+### 2. Balancing DRY and Independence
 
-Instead of organizing by technical type (models, views, controllers), organize by feature:
+Sometimes duplicating simple logic is better than creating tight coupling:
 
-```
-❌ Bad Organization
-src/
-  models/
-    user.py
-    order.py
-    product.py
-  controllers/
-    user_controller.py
-    order_controller.py
-  services/
-    user_service.py
-    order_service.py
+```python
+# ❌ Too DRY: Creates unnecessary coupling
+class SharedValidation:
+    @staticmethod
+    def validate_email(email: str) -> bool:
+        return "@" in email
 
-✅ Good Organization
-src/
-  users/
-    types.py      # TypedDicts for user domain
-    storage.py    # User storage interface
-    actions.py    # Pure functions for user operations
-    api.py        # API endpoints for user features
-  orders/
-    types.py      # TypedDicts for order domain
-    validation.py # Order validation rules
-    processing.py # Order processing logic
-    api.py        # API endpoints for orders
+# ✅ Better: Independent components
+def create_user(user: User) -> None:
+    if "@" not in user["email"]:  # Simple rule can be duplicated
+        raise ValueError("Invalid email")
+    # ... save user
+
+def create_customer(customer: Customer) -> None:
+    if "@" not in customer["email"]:  # Duplication acceptable
+        raise ValueError("Invalid email")
+    # ... save customer
 ```
 
-## The Open-Closed Principle
+### 3. Open-Closed Principle
 
 Components should be open for extension but closed for modification. Use composition of pure functions:
 
@@ -247,7 +196,7 @@ def create_minimum_price_rule(minimum: Decimal) -> PriceRule:
         "calculate": calculate
     }
 
-# Compose rules
+# Compose rules - extend behavior without modifying existing code
 def apply_price_rules(
     base_price: Decimal,
     rules: List[PriceRule]
@@ -257,134 +206,37 @@ def apply_price_rules(
         price = rule["calculate"](price)
     return price
 
-# Usage
+# Usage: Add new rules without changing core logic
 rules = [
     create_discount_rule(Decimal("10")),
-    create_minimum_price_rule(Decimal("5"))
+    create_minimum_price_rule(Decimal("5")),
+    # Easy to add new rules:
+    # create_seasonal_discount_rule(Decimal("20"))
+    # create_bulk_discount_rule(quantity=5)
 ]
 
 final_price = apply_price_rules(Decimal("100"), rules)
 ```
 
-## Vertical vs Horizontal Splitting
+### 4. Testing Strategy
 
-Two ways to split components:
+Co-locate tests with the code they verify:
 
-### Vertical (by Feature)
-```python
-# users/types.py
-class User(TypedDict):
-    id: str
-    name: str
-    email: str
-
-# users/validation.py
-def validate_email(email: str) -> bool:
-    return "@" in email
-
-# users/storage.py
-class UserStorage(Protocol):
-    def save(self, user: User) -> None: ...
-    def get(self, user_id: str) -> User: ...
-
-# users/api.py
-def create_user_endpoints(storage: UserStorage):
-    def create_user(user: User) -> None:
-        if not validate_email(user["email"]):
-            raise ValueError("Invalid email")
-        storage.save(user)
-    
-    return {"create_user": create_user}
 ```
-
-### Horizontal (by Layer)
-```python
-# shared/storage.py
-class Storage(Protocol):
-    def save(self, key: str, data: dict) -> None: ...
-    def get(self, key: str) -> dict: ...
-
-# shared/validation.py
-def validate_required(data: dict, fields: List[str]) -> bool:
-    return all(field in data for field in fields)
-
-# shared/api.py
-def create_crud_endpoints(
-    storage: Storage,
-    validate: Callable[[dict], bool]
-):
-    def create(data: dict) -> None:
-        if not validate(data):
-            raise ValueError("Invalid data")
-        storage.save(data["id"], data)
-    
-    return {"create": create}
-```
-
-# DRY vs Coupling: Finding the Right Balance
-
-When designing components, we often face a tension between DRY (Don't Repeat Yourself) and loose coupling. This lesson explores how to balance these competing principles.
-
-### The Tension
-
-1. **DRY** pushes us to share code and create dependencies
-2. **Loose coupling** pushes us to keep components independent
-3. Sometimes these goals conflict
-
-### Example: Validation Rules
-
-```python
-from typing import TypedDict, Protocol, List
-from decimal import Decimal
-
-# ❌ Too DRY: Shared validation creates coupling
-class ValidationRules:
-    @staticmethod
-    def validate_email(email: str) -> bool:
-        return "@" in email
-    
-    @staticmethod
-    def validate_price(price: Decimal) -> bool:
-        return price > Decimal("0")
-
-class User(TypedDict):
-    email: str
-    name: str
-
-class Product(TypedDict):
-    name: str
-    price: Decimal
-
-# Now both modules depend on ValidationRules
-def create_user(user: User) -> None:
-    if not ValidationRules.validate_email(user["email"]):
-        raise ValueError("Invalid email")
-    # ... save user
-
-def create_product(product: Product) -> None:
-    if not ValidationRules.validate_price(product["price"]):
-        raise ValueError("Invalid price")
-    # ... save product
-
-# ✅ Better: Accept some duplication for independence
-def create_user(user: User) -> None:
-    if "@" not in user["email"]:  # Simple rule duplicated
-        raise ValueError("Invalid email")
-    # ... save user
-
-def create_product(product: Product) -> None:
-    if product["price"] <= Decimal("0"):  # Simple rule duplicated
-        raise ValueError("Invalid price")
-    # ... save product
+feature/
+  __init__.py
+  component.py        # Component implementation
+  component_test.py   # Tests alongside component
+  types.py           # Shared types
 ```
 
 ## Key Takeaways
 
-- Use TypedDict and Protocol for clear interfaces
-- Organize code by feature, not technical type
-- Components should have a single responsibility
-- Depend on interfaces, not implementations
-- Use pure functions and composition
+1. **Clear Boundaries**: Each component should have a well-defined responsibility and interface
+2. **Local Behavior**: Component behavior should be obvious from its code
+3. **Co-location**: Keep related code together, regardless of technical layer
+4. **Loose Coupling**: Depend on interfaces, not implementations
+5. **Pragmatic DRY**: Accept some duplication to maintain independence
 
 ## Additional Resources
 
