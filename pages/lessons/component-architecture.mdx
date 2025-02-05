@@ -1,6 +1,16 @@
 # Component-Based Architecture: Building Maintainable Systems
 
-Component-based architecture helps us build maintainable systems by organizing code into independent, reusable pieces. This approach naturally builds on our functional programming principles.
+![Component-based architecture: Build maintainable systems by breaking down code into independent, reusable components](/component.png)
+
+In modern software development, applications are becoming increasingly complex. Component-based architecture helps manage this complexity by breaking down systems into independent, reusable pieces that follow two key principles:
+
+1. **Locality of Behavior**: The behavior of code should be obvious by looking at that unit of code
+2. **Co-location**: Related code should be placed as close as possible to where it's relevant
+
+These principles naturally build on our functional programming approach and are especially valuable in:
+- Microservices architectures
+- Frontend frameworks like React
+- API-driven applications
 
 ## What Makes a Good Component?
 
@@ -8,15 +18,16 @@ A good component:
 1. Has a clear, single responsibility
 2. Exposes a well-defined interface
 3. Can be tested in isolation
-4. Manages its own state
+4. Follows locality of behavior
+5. Co-locates related code
 
-### Example: Payment Processing Component
+### Example: Payment Processing Component with Co-located Behavior
 
 ```python
 from typing import TypedDict, Literal, Protocol
 from decimal import Decimal
 
-# Clear interface using TypedDict
+# Co-locate all payment-related types together
 class PaymentRequest(TypedDict):
     amount: Decimal
     currency: str
@@ -28,37 +39,99 @@ class PaymentResult(TypedDict):
     transaction_id: str
     error_message: str
 
-# Protocol defines the interface
+class PaymentValidationError(Exception):
+    """Co-locate domain errors with their related types"""
+    pass
+
+# Protocol defines the interface - behavior is local to this component
 class PaymentProcessor(Protocol):
     def process_payment(self, request: PaymentRequest) -> PaymentResult: ...
+    def validate_request(self, request: PaymentRequest) -> None: ...
 
-# Concrete implementation
 def create_stripe_processor(api_key: str) -> PaymentProcessor:
+    """All Stripe-specific behavior is contained within this function"""
+    def validate_request(request: PaymentRequest) -> None:
+        if request["amount"] <= Decimal("0"):
+            raise PaymentValidationError("Amount must be positive")
+        if request["currency"] not in ["USD", "EUR"]:
+            raise PaymentValidationError("Unsupported currency")
+    
     def process_payment(request: PaymentRequest) -> PaymentResult:
-        # Implementation details hidden
-        return {
-            "success": True,
-            "transaction_id": "tx_123",
-            "error_message": ""
-        }
+        # Validation is co-located with processing
+        try:
+            validate_request(request)
+            # Implementation details hidden
+            return {
+                "success": True,
+                "transaction_id": "tx_123",
+                "error_message": ""
+            }
+        except PaymentValidationError as e:
+            return {
+                "success": False,
+                "transaction_id": "",
+                "error_message": str(e)
+            }
     
     return type("StripeProcessor", (), {
-        "process_payment": process_payment
-    })()
-
-# Alternative implementation
-def create_paypal_processor(credentials: dict) -> PaymentProcessor:
-    def process_payment(request: PaymentRequest) -> PaymentResult:
-        return {
-            "success": True,
-            "transaction_id": "pp_456",
-            "error_message": ""
-        }
-    
-    return type("PayPalProcessor", (), {
-        "process_payment": process_payment
+        "process_payment": process_payment,
+        "validate_request": validate_request
     })()
 ```
+
+## Benefits of Locality and Co-location
+
+1. **Clear Behavior**: The behavior of each component is self-contained and obvious:
+   ```python
+   # ✅ Behavior is local and obvious
+   def create_order_processor(inventory: InventoryChecker, payments: PaymentProcessor):
+       """All order processing behavior in one place"""
+       def process_order(order: Order) -> OrderResult:
+           if not inventory.check_availability(order.items):
+               return OrderResult(success=False, error="Items unavailable")
+           if not payments.process_payment(order.total):
+               return OrderResult(success=False, error="Payment failed")
+           return OrderResult(success=True)
+       return process_order
+
+   # ❌ Behavior spread across files
+   class OrderProcessor:
+       """Behavior split across multiple files/methods"""
+       def __init__(self):
+           self.inventory = None  # Set elsewhere
+           self.payments = None   # Set elsewhere
+           
+       def process(self, order):
+           if self.check_inventory():  # Implementation elsewhere
+               if self.handle_payment():  # Implementation elsewhere
+                   return Success()
+   ```
+
+2. **Co-located Tests**: Tests are placed next to the code they test:
+   ```
+   payment/
+     __init__.py
+     processor.py      # Payment processing code
+     processor_test.py # Tests right next to implementation
+     types.py         # Shared types for the module
+   ```
+
+3. **Grouped by Feature**: Code that changes together stays together:
+   ```python
+   # All payment validation logic together
+   def validate_payment(request: PaymentRequest) -> None:
+       validate_amount(request.amount)
+       validate_currency(request.currency)
+       validate_method(request.method)
+   
+   def validate_amount(amount: Decimal) -> None:
+       if amount <= 0:
+           raise PaymentValidationError("Amount must be positive")
+   
+   def validate_currency(currency: str) -> None:
+       if currency not in SUPPORTED_CURRENCIES:
+           raise PaymentValidationError(f"Unsupported currency: {currency}")
+   ```
 
 ## Loose Coupling Through Interfaces
 
@@ -315,6 +388,6 @@ def create_product(product: Product) -> None:
 
 ## Additional Resources
 
-- [Python Protocol Documentation](https://docs.python.org/3/library/typing.html#typing.Protocol)
-- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [Feature-Sliced Design](https://feature-sliced.design/) 
+- [Locality of Behavior](https://mtsknn.fi/blog/locality-of-behavior-and-co-location/)
+- [Open-Closed Principle](https://en.wikipedia.org/wiki/Open/closed_principle)
+- [Vertical vs Horizontal Splitting](https://www.linkedin.com/pulse/horizontal-slicing-vs-vertical-krishna-chaitanya-repaka/)
