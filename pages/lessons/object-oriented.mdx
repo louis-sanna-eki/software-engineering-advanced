@@ -15,38 +15,62 @@ Classes are best used when you need to encapsulate state and behavior together. 
 ### Example: Good Use of Classes
 
 ```python
-from dataclasses import dataclass
-from datetime import datetime
-from typing import List
+from typing import TypedDict, List
 
-@dataclass
-class Transaction:
-    type: str
-    amount: float
-    date: datetime
+class NeuralLayer:
+    """
+    Example inspired by neural network layers, similar to PyTorch's design.
+    Demonstrates good use of classes where state (weights) and behavior are tightly coupled.
+    """
+    def __init__(self, input_size: int, output_size: int):
+        # Hidden state that needs to be maintained
+        self._weights = self._initialize_weights(input_size, output_size)
+        self._bias = self._initialize_bias(output_size)
+        self._gradients = {"weights": None, "bias": None}
+        
+    def _initialize_weights(self, input_size: int, output_size: int) -> List[List[float]]:
+        # Initialize weights with small random values
+        import random
+        return [[random.uniform(-0.1, 0.1) for _ in range(output_size)] 
+                for _ in range(input_size)]
+    
+    def _initialize_bias(self, output_size: int) -> List[float]:
+        return [0.0] * output_size
+    
+    def forward(self, inputs: List[float]) -> List[float]:
+        if len(inputs) != len(self._weights):
+            raise ValueError("Input size mismatch")
+        
+        # Compute output using weights and bias
+        output = [0.0] * len(self._weights[0])
+        for i in range(len(self._weights[0])):
+            for j in range(len(inputs)):
+                output[i] += inputs[j] * self._weights[j][i]
+            output[i] += self._bias[i]
+        
+        return output
+    
+    def backward(self, gradient: List[float]) -> List[float]:
+        # Store gradients for weight update
+        self._gradients["weights"] = gradient
+        self._gradients["bias"] = gradient
+        # Compute and return gradient for next layer
+        return gradient  # Simplified for example
 
-class BankAccount:
-    def __init__(self, initial_balance: float):
-        self._balance = initial_balance
-        self._transactions: List[Transaction] = []
-        self._last_activity_date = datetime.now()
-
-    def deposit(self, amount: float) -> None:
-        if amount <= 0:
-            raise ValueError("Invalid amount")
-        self._balance += amount
-        self._record_transaction("deposit", amount)
-
-    def _record_transaction(self, type_: str, amount: float) -> None:
-        self._transactions.append(
-            Transaction(type=type_, amount=amount, date=datetime.now())
-        )
-        self._last_activity_date = datetime.now()
-```
+    def update_parameters(self, learning_rate: float) -> None:
+        # Update weights and bias using stored gradients
+        if not self._gradients["weights"]:
+            return
+        
+        for i in range(len(self._weights)):
+            for j in range(len(self._weights[0])):
+                self._weights[i][j] -= learning_rate * self._gradients["weights"][j]
+        
+        for i in range(len(self._bias)):
+            self._bias[i] -= learning_rate * self._gradients["bias"][i]
 
 ### Example: Unnecessary Use of Classes
 
-```python
 # Bad: No state to manage, just functions
 class MathOperations:
     def add(self, a: float, b: float) -> float:
@@ -77,28 +101,37 @@ Inheritance can lead to several problems:
 ### Example: Problematic Inheritance
 
 ```python
-class Animal:
-    def __init__(self, name: str):
-        self._name = name
+class Layer:
+    def __init__(self, size: int):
+        self._size = size
     
-    def make_sound(self) -> None:
-        print("Some generic sound")
+    def forward(self, inputs: List[float]) -> List[float]:
+        raise NotImplementedError()
     
-    def move(self) -> None:
-        print("Moving...")
+    def backward(self, gradient: List[float]) -> List[float]:
+        raise NotImplementedError()
 
-class Bird(Animal):
-    def fly(self) -> None:
-        print("Flying...")
+class DenseLayer(Layer):
+    def __init__(self, input_size: int, output_size: int):
+        super().__init__(output_size)
+        self._weights = [[0.0] * output_size for _ in range(input_size)]
     
-    # Forced to override parent method
-    def move(self) -> None:
-        self.fly()  # Tightly coupled to fly implementation
+    def forward(self, inputs: List[float]) -> List[float]:
+        # Implementation tied to parent class assumptions
+        if len(inputs) != len(self._weights):
+            raise ValueError("Size mismatch")
+        return [sum(w * x for w, x in zip(row, inputs)) 
+                for row in self._weights]
 
-class Penguin(Bird):
-    # Oops! Penguins can't fly, but they inherit fly()
-    def fly(self) -> None:
-        raise NotImplementedError("Can't fly!")
+class DropoutLayer(Layer):
+    def __init__(self, size: int, rate: float):
+        super().__init__(size)
+        if not 0 <= rate <= 1:
+            raise ValueError("Rate must be between 0 and 1")
+        self._rate = rate
+    
+    # Forced to implement forward/backward even though
+    # they work completely differently from DenseLayer
 ```
 
 ## Composition Over Inheritance
@@ -106,59 +139,104 @@ class Penguin(Bird):
 Instead of inheritance, prefer composition by:
 1. Breaking down functionality into small, focused components
 2. Combining components to build complex behavior
-3. Using protocols to define contracts
+3. Using interfaces to define contracts
 
 ### Example: Better Design with Composition
 
 ```python
-from typing import Protocol
-from dataclasses import dataclass
+from typing import Protocol, List, TypedDict
+from abc import abstractmethod
 
-class Movable(Protocol):
-    def move(self) -> None:
+class LayerConfig(TypedDict):
+    input_size: int
+    output_size: int
+    activation: str
+
+class ForwardPass(Protocol):
+    @abstractmethod
+    def forward(self, inputs: List[float]) -> List[float]:
         ...
 
-class Soundable(Protocol):
-    def make_sound(self) -> None:
+class BackwardPass(Protocol):
+    @abstractmethod
+    def backward(self, gradient: List[float]) -> List[float]:
         ...
 
-@dataclass
-class Flying:
-    def move(self) -> None:
-        print("Flying through the air")
+class WeightInitializer:
+    def __init__(self, seed: int | None = None):
+        self._rng = random.Random(seed)
+    
+    def initialize(self, shape: tuple[int, int]) -> List[List[float]]:
+        rows, cols = shape
+        return [[self._rng.uniform(-0.1, 0.1) for _ in range(cols)] 
+                for _ in range(rows)]
 
-@dataclass
-class Walking:
-    def move(self) -> None:
-        print("Walking on the ground")
+class DenseLayerImpl(ForwardPass, BackwardPass):
+    def __init__(self, config: LayerConfig, initializer: WeightInitializer):
+        self._weights = initializer.initialize(
+            (config["input_size"], config["output_size"])
+        )
+        self._bias = [0.0] * config["output_size"]
+        self._activation = self._get_activation(config["activation"])
+        self._last_input: List[float] | None = None
+    
+    def forward(self, inputs: List[float]) -> List[float]:
+        # Implementation using composition
+        self._last_input = inputs  # Store for backward pass
+        raw_output = self._compute_output(inputs)
+        return self._activation(raw_output)
+    
+    def backward(self, gradient: List[float]) -> List[float]:
+        if self._last_input is None:
+            raise ValueError("Must call forward before backward")
+        # Compute gradients for weights and bias
+        input_gradients = [0.0] * len(self._last_input)
+        for i in range(len(self._weights)):
+            for j in range(len(gradient)):
+                input_gradients[i] += gradient[j] * self._weights[i][j]
+        return input_gradients
+    
+    def _compute_output(self, inputs: List[float]) -> List[float]:
+        return [sum(w * x for w, x in zip(row, inputs)) + b
+                for row, b in zip(self._weights, self._bias)]
+    
+    def _get_activation(self, name: str):
+        activations = {
+            "relu": lambda x: [max(0, v) for v in x],
+            "sigmoid": lambda x: [1 / (1 + math.exp(-v)) for v in x],
+        }
+        return activations.get(name, lambda x: x)
 
-@dataclass
-class EagleSound:
-    def make_sound(self) -> None:
-        print("Screech!")
+# Example usage showing how the protocols enable composition
+def train_layer(layer: ForwardPass & BackwardPass, inputs: List[float], 
+                target: List[float], learning_rate: float = 0.01) -> float:
+    # Forward pass
+    output = layer.forward(inputs)
+    
+    # Compute loss (simplified MSE)
+    loss = sum((o - t) ** 2 for o, t in zip(output, target)) / len(target)
+    
+    # Backward pass
+    gradients = [(o - t) * 2 / len(target) for o, t in zip(output, target)]
+    layer.backward(gradients)
+    
+    return loss
 
-@dataclass
-class PenguinSound:
-    def make_sound(self) -> None:
-        print("Honk!")
+# Easy to create and combine different components
+config: LayerConfig = {
+    "input_size": 10,
+    "output_size": 5,
+    "activation": "relu"
+}
+layer = DenseLayerImpl(config, WeightInitializer(seed=42))
 
-class Bird:
-    def __init__(self, movement: Movable, sound: Soundable):
-        self._movement = movement
-        self._sound = sound
-
-    def move(self) -> None:
-        self._movement.move()
-
-    def make_sound(self) -> None:
-        self._sound.make_sound()
-
-# Easy to create different types of birds
-eagle = Bird(movement=Flying(), sound=EagleSound())
-penguin = Bird(movement=Walking(), sound=PenguinSound())
+# Example training step
+inputs = [0.1] * 10  # Example input
+target = [0.5] * 5   # Example target
+loss = train_layer(layer, inputs, target)
 ```
 
-## Modules vs Protocols vs Classes
+## Modules vs Interfaces vs Classes
 
 Each has its specific use case:
 
@@ -180,24 +258,28 @@ def subtract(a: float, b: float) -> float:
 from math_utils import add, subtract
 ```
 
-### Protocols
+### Interfaces
 - Define contracts
-- Enable duck typing
+- Enable type checking
 - Document expected behavior
 - Support composition
 
 ```python
 from typing import Protocol, TypeVar
+from abc import abstractmethod
 
 T = TypeVar('T')
 
 class Repository(Protocol[T]):
+    @abstractmethod
     def find(self, id: str) -> T:
         ...
     
+    @abstractmethod
     def save(self, item: T) -> None:
         ...
     
+    @abstractmethod
     def delete(self, id: str) -> None:
         ...
 
@@ -220,51 +302,40 @@ class MongoRepository:
 - Create instances
 
 ```python
-from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, TypedDict
 
-class User(Protocol):
+class UserData(TypedDict):
     id: str
     name: str
+    email: str
+
+class User(Protocol):
+    def get_data(self) -> UserData:
+        ...
+    def update(self, data: UserData) -> None:
+        ...
 
 class UserService:
-    def __init__(self, repository: Repository[User]):
+    def __init__(self, repository: Repository[UserData]):
         self._repository = repository
 
-    async def create_user(self, data: dict) -> User:
+    async def create_user(self, data: UserData) -> User:
         # Validate
         # Create user
         # Save to repository
         return user
 ```
 
-## Exercises
-
-1. **Class Design Exercise**
-   - Identify scenarios where classes are appropriate/inappropriate
-   - Refactor a class-heavy codebase to use more functions
-   - Document the benefits and tradeoffs
-
-2. **Inheritance Refactoring**
-   - Take a deep inheritance hierarchy
-   - Refactor it to use composition
-   - Compare the flexibility and maintainability
-
-3. **Protocol Design**
-   - Design protocols for a system
-   - Implement them using both inheritance and composition
-   - Evaluate which approach is more maintainable
-
 ## Key Takeaways
 
-- Use classes only when you need to manage state and behavior together
-- Prefer composition over inheritance for code reuse
-- Use protocols to define contracts and enable composition
+- Use classes when you need to manage state and behavior together (like neural network layers)
+- Prefer TypedDict for data structures without behavior
+- Use interfaces (Protocols) to define contracts and enable composition
 - Keep modules focused and cohesive
-- Think in terms of behaviors rather than types
+- Think in terms of behaviors and composition rather than inheritance
 
 ## Additional Resources
 
-- [Python Data Classes](https://docs.python.org/3/library/dataclasses.html)
+- [Python Type Hints](https://docs.python.org/3/library/typing.html)
 - [Python Protocols](https://peps.python.org/pep-0544/)
-- [Composition vs Inheritance in Python](https://realpython.com/inheritance-composition-python/) 
+- [Clean Architecture in Python](https://www.cosmicpython.com/) 
