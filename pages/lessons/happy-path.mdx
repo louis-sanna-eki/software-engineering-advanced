@@ -263,7 +263,7 @@ def apply_zoom_messy(element: dict, zoom: dict | None = None) -> dict:
         "y": element["y"] + originy
     }
 
-# ✅ With TypedDict - clean defaults
+# ✅ With clean defaults
 def apply_zoom(element: dict, zoom: ZoomConfig = get_default_zoom()) -> dict:
     return {
         "width": element["width"] * zoom["scale"],
